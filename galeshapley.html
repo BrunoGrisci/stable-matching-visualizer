@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Gale-Shapley Stable Matching Visualizer</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22%3E%3Ctext y=%22.9em%22 font-size=%2290%22%3E%E2%9D%A4%EF%B8%8F%3C/text%3E%3C/svg%3E">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Outfit:wght@300;400;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="galeshapley/css/style.css">
+</head>
+<body class="theme-light" data-lang="en">
+  <header>
+    <div class="header-title-wrap">
+      <h1 data-i18n="app_title">Gale-Shapley Stable Matching Visualizer</h1>
+      <p data-i18n="app_subtitle">Explore step-by-step proposals, engagements, and stability properties.</p>
+    </div>
+    <div class="header-controls">
+      <button id="helpBtn" class="icon-btn" data-i18n-title="help_open" aria-label="Open help">?</button>
+      <button id="langToggle" class="icon-btn" aria-label="Toggle language"><span id="langFlag">🇺🇸</span></button>
+      <button id="themeToggle" class="icon-btn" aria-label="Toggle theme"><span id="themeIcon">🌙</span></button>
+    </div>
+  </header>
+
+  <main id="mainLayout">
+    <aside class="control-panel panel" id="controlPanel">
+      <button id="toggleControlsBtn" class="icon-btn panel-toggle-btn" data-i18n-title="toggle_controls_hide" aria-label="Collapse controls">🧰-</button>
+      <h2 data-i18n="controls_title">Controls</h2>
+
+      <div class="field-grid two">
+        <label for="variantSelect" data-i18n="variant_label">Scenario</label>
+        <select id="variantSelect">
+          <option value="classic" data-i18n="variant_classic">Classic Stable Matching</option>
+          <option value="good_bad" data-i18n="variant_good_bad">Good and Bad Categories</option>
+          <option value="forbidden" data-i18n="variant_forbidden">Forbidden Pairs</option>
+          <option value="capacity" data-i18n="variant_capacity">Hospital Capacities</option>
+        </select>
+        <p id="scenarioNote" class="field-note"></p>
+
+        <label for="presetSelect" data-i18n="preset_label">Instance preset</label>
+        <select id="presetSelect">
+          <option value="hpl_spl" data-i18n="preset_hpl">HPL/SPL Demo</option>
+          <option value="worst_case_demo" data-i18n="preset_worst_case_demo">Worst case</option>
+          <option value="random" data-i18n="preset_random">Random</option>
+          <option value="inverse" data-i18n="preset_inverse">Inverse</option>
+          <option value="easy" data-i18n="preset_easy">Easy</option>
+        </select>
+        <p id="presetNote" class="field-note"></p>
+
+        <div class="import-box inline-import">
+          <label for="csvInput" data-i18n="csv_label">Import instance (.csv)</label>
+          <input id="csvInput" type="file" accept=".csv,text/csv">
+        </div>
+
+        <div id="pairsField" class="field-slot">
+          <label for="pairsInput" data-i18n="pairs_label">Number of pairs (n)</label>
+          <input id="pairsInput" type="number" min="2" max="2000" step="1" value="5" inputmode="numeric">
+        </div>
+
+        <div id="goodCountField" class="field-slot">
+          <label for="goodCountInput" data-i18n="good_count_label">Good count (k)</label>
+          <input id="goodCountInput" type="number" min="1" max="2000" step="1" value="2" inputmode="numeric">
+        </div>
+
+        <label for="proposerSelect" data-i18n="proposer_label">Proposer side</label>
+        <select id="proposerSelect">
+          <option id="proposerMenOption" value="men">Men propose</option>
+          <option id="proposerWomenOption" value="women">Women propose</option>
+        </select>
+
+        <label for="groupLeftInput" data-i18n="group_left_label">Left group name</label>
+        <input id="groupLeftInput" type="text" value="Men">
+
+        <label for="groupRightInput" data-i18n="group_right_label">Right group name</label>
+        <input id="groupRightInput" type="text" value="Women">
+      </div>
+
+      <div class="row-btns">
+        <button id="loadPresetBtn" data-i18n="load_preset_btn">Load instance</button>
+        <button id="resetRunBtn" class="secondary" data-i18n="reset_btn">Reset run</button>
+      </div>
+
+      <details id="advancedDetails" open>
+        <summary data-i18n="advanced_summary">Variant parameters</summary>
+        <div class="field-grid">
+          <div id="forbiddenField" class="field-slot">
+            <label for="forbiddenInput" data-i18n="forbidden_label">Forbidden pairs (man-woman, comma separated)</label>
+            <textarea id="forbiddenInput" rows="2" placeholder="M1-W2, M3-W1"></textarea>
+          </div>
+
+          <div id="capacityField" class="field-slot">
+            <label for="capacityInput" data-i18n="capacity_label">Capacities (receiver:cap, comma separated)</label>
+            <textarea id="capacityInput" rows="2" placeholder="Atlanta:2, Boston:1"></textarea>
+          </div>
+        </div>
+      </details>
+
+      <div class="field-grid two">
+        <label for="speedSelect" data-i18n="speed_label">Auto speed</label>
+        <select id="speedSelect">
+          <option value="0.25">0.25x</option>
+          <option value="0.5">0.5x</option>
+          <option value="1" selected>1x</option>
+          <option value="2">2x</option>
+          <option value="4">4x</option>
+          <option value="8">8x</option>
+          <option value="10">10x</option>
+        </select>
+      </div>
+
+      <div class="row-btns run-row">
+        <button id="runStepBtn" data-i18n="run_step_btn">Run step</button>
+        <button id="autoRunBtn" data-i18n="auto_run_btn">Auto run</button>
+        <button id="runFullBtn" data-i18n="run_full_btn">Run full</button>
+      </div>
+
+      <div class="counters-panel">
+        <div class="counter-item">
+          <span data-i18n="counter_proposals">Proposals</span>
+          <strong id="proposalCount">0</strong>
+        </div>
+        <div class="counter-item">
+          <span data-i18n="counter_engaged">Engaged pairs</span>
+          <strong id="engagedCount">0</strong>
+        </div>
+        <div class="counter-item">
+          <span id="singleLeftLabel" data-i18n="counter_single_men">Single men</span>
+          <strong id="singleMenCount">0</strong>
+        </div>
+        <div class="counter-item">
+          <span id="singleRightLabel" data-i18n="counter_single_women">Single women</span>
+          <strong id="singleWomenCount">0</strong>
+        </div>
+      </div>
+
+      <div id="statusBar" class="status-note" aria-live="polite"></div>
+    </aside>
+
+    <div id="mainSplitter" class="splitter main-splitter" role="separator" aria-orientation="vertical" aria-label="Resize controls panel"></div>
+
+    <section class="workspace panel" id="workspacePanel">
+      <div class="tabs" role="tablist" aria-label="Main tabs">
+        <button class="tab-btn active" id="tabSimBtn" data-tab="sim" data-i18n="tab_sim">Simulation</button>
+        <button class="tab-btn" id="tabCurvesBtn" data-tab="curves" data-i18n="tab_curves">Curves</button>
+      </div>
+
+      <article id="tabSim" class="tab-panel active" role="tabpanel">
+        <div class="sim-grid" id="simGrid">
+          <section class="visual-column" id="visualColumn">
+            <div class="pref-pair">
+              <article class="pref-box">
+                <h3 id="menPrefTitle" data-i18n="men_pref_title">Men preferences</h3>
+                <div id="menPrefTable" class="pref-table-wrap"></div>
+              </article>
+              <article class="pref-box">
+                <h3 id="womenPrefTitle" data-i18n="women_pref_title">Women preferences</h3>
+                <div id="womenPrefTable" class="pref-table-wrap"></div>
+              </article>
+            </div>
+
+            <article class="step-log-box">
+              <h3 data-i18n="log_title">Step log</h3>
+              <div id="stepLog" class="step-log"></div>
+            </article>
+
+            <article class="graph-box">
+              <div class="graph-head">
+                <h3 data-i18n="graph_title">Bipartite graph</h3>
+                <span id="graphModeTag" class="chip"></span>
+              </div>
+              <div id="graphArea" class="graph-area">
+                <svg id="matchGraph" viewBox="0 0 1200 620" role="img" aria-label="Stable matching graph"></svg>
+              </div>
+            </article>
+
+            <article class="insights-box">
+              <h3 data-i18n="insights_title">Correctness insights</h3>
+              <div id="insightsGrid" class="insights-grid"></div>
+            </article>
+          </section>
+
+          <div id="simSplitter" class="splitter sim-splitter" role="separator" aria-orientation="vertical" aria-label="Resize algorithm panel"></div>
+
+          <section class="code-column" id="codeColumn">
+            <button id="toggleCodeBtn" class="icon-btn panel-toggle-btn" data-i18n-title="toggle_code_hide" aria-label="Collapse algorithm panel">📜-</button>
+            <h3 data-i18n="code_title">Algorithm code</h3>
+            <div id="codeDisplay" class="code-display"></div>
+
+            <h3 data-i18n="ds_title">Data structures</h3>
+            <div id="dsDisplay" class="ds-display"></div>
+          </section>
+        </div>
+
+        <section class="editor-grid">
+          <article class="editor-box">
+            <div class="editor-head">
+              <h3 id="editorLeftTitle" data-i18n="editor_men_title">Editable men table</h3>
+              <button id="addManRowBtn" class="secondary" data-i18n="add_row_btn">Add row</button>
+            </div>
+            <table class="editor-table" id="menEditorTable">
+              <thead>
+                <tr>
+                  <th data-i18n="editor_col_name">Name</th>
+                  <th data-i18n="editor_col_prefs">Preferences (comma separated)</th>
+                  <th data-i18n="editor_col_cap">Cap</th>
+                  <th data-i18n="editor_col_cat">Category</th>
+                  <th data-i18n="editor_col_del">Del</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </article>
+
+          <article class="editor-box">
+            <div class="editor-head">
+              <h3 id="editorRightTitle" data-i18n="editor_women_title">Editable women table</h3>
+              <button id="addWomanRowBtn" class="secondary" data-i18n="add_row_btn">Add row</button>
+            </div>
+            <table class="editor-table" id="womenEditorTable">
+              <thead>
+                <tr>
+                  <th data-i18n="editor_col_name">Name</th>
+                  <th data-i18n="editor_col_prefs">Preferences (comma separated)</th>
+                  <th data-i18n="editor_col_cap">Cap</th>
+                  <th data-i18n="editor_col_cat">Category</th>
+                  <th data-i18n="editor_col_del">Del</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </article>
+        </section>
+
+        <div class="row-btns bottom-row">
+          <button id="applyTablesBtn" data-i18n="apply_tables_btn">Apply editable tables</button>
+          <button id="exportCsvBtn" class="secondary" data-i18n="export_csv_btn">Export CSV</button>
+        </div>
+      </article>
+
+      <article id="tabCurves" class="tab-panel" role="tabpanel">
+        <div class="curve-controls">
+          <div class="field-grid curve-grid">
+            <div class="curve-field">
+              <label for="curveStartInput" data-i18n="curve_start">n start</label>
+              <input id="curveStartInput" type="number" min="2" step="1" value="10" inputmode="numeric">
+            </div>
+
+            <div class="curve-field">
+              <label for="curveEndInput" data-i18n="curve_end">n end</label>
+              <input id="curveEndInput" type="number" min="2" step="1" value="200" inputmode="numeric">
+            </div>
+
+            <div class="curve-field">
+              <label for="curveStepInput" data-i18n="curve_step">n step</label>
+              <input id="curveStepInput" type="number" min="1" step="1" value="10" inputmode="numeric">
+            </div>
+
+            <div class="curve-field">
+              <label for="curveRepeatsInput" data-i18n="curve_repeats">Samples per n</label>
+              <input id="curveRepeatsInput" type="number" min="1" max="100" step="1" value="3" inputmode="numeric">
+            </div>
+
+            <div class="curve-field">
+              <label for="curveXMaxSelect" data-i18n="curve_xmax">X max</label>
+              <select id="curveXMaxSelect"></select>
+            </div>
+
+            <div class="curve-field">
+              <label for="curveYZoomInput" data-i18n="curve_yzoom">Y zoom</label>
+              <input id="curveYZoomInput" type="range" min="1" max="8" step="0.5" value="1">
+            </div>
+          </div>
+
+          <div class="curve-toggle-grid">
+            <label class="toggle-chip"><input id="toggleRandom" type="checkbox" checked><span data-i18n="curve_col_random">Random</span></label>
+            <label class="toggle-chip"><input id="toggleInverse" type="checkbox" checked><span data-i18n="curve_col_inverse">Inverse</span></label>
+            <label class="toggle-chip"><input id="toggleEasy" type="checkbox" checked><span data-i18n="curve_col_easy">Easy</span></label>
+            <label class="toggle-chip"><input id="toggleWorstCase" type="checkbox" checked><span data-i18n="curve_col_worst_case">Worst case</span></label>
+            <label class="toggle-chip"><input id="toggleLinear" type="checkbox" checked><span data-i18n="curve_col_linear">~ n</span></label>
+            <label class="toggle-chip"><input id="toggleHalf" type="checkbox" checked><span data-i18n="curve_col_half">~ n(n+1)/2</span></label>
+            <label class="toggle-chip"><input id="toggleSquare" type="checkbox" checked><span data-i18n="curve_col_square">~ n²</span></label>
+          </div>
+
+          <div class="row-btns">
+            <button id="runCurvesBtn" data-i18n="curve_run_btn">Run curves</button>
+            <button id="stopCurvesBtn" class="secondary" data-i18n="curve_stop_btn">Stop</button>
+          </div>
+
+          <div id="curveStatus" class="status-note"></div>
+        </div>
+
+        <article class="curve-chart-box">
+          <h3 data-i18n="curve_chart_title">Proposal curves by instance size</h3>
+          <div class="curve-chart-area" id="curveChartArea">
+            <svg id="curveChartSvg" viewBox="0 0 960 380" role="img" aria-label="Gale-Shapley proposal curves"></svg>
+            <div id="curveTooltip" class="curve-tooltip" hidden></div>
+          </div>
+        </article>
+
+        <article class="curve-table-box">
+          <h3 data-i18n="curve_table_title">Average proposals table</h3>
+          <div class="curve-table-wrap">
+            <table id="curveTable" class="curve-table"></table>
+          </div>
+        </article>
+      </article>
+    </section>
+  </main>
+
+  <button id="floatingControlsBtn" class="icon-btn floating-toggle floating-controls" hidden aria-label="Expand controls">🧰+</button>
+  <button id="floatingCodeBtn" class="icon-btn floating-toggle floating-code" hidden aria-label="Expand algorithm">📜+</button>
+
+  <div id="helpOverlay" class="modal-overlay" role="dialog" aria-modal="true" hidden>
+    <div class="modal-card panel">
+      <div class="modal-header">
+        <h2 data-i18n="help_title">How to use this tool</h2>
+        <button id="helpCloseBtn" class="secondary" data-i18n="close_btn">Close</button>
+      </div>
+      <div class="modal-content">
+        <p data-i18n="help_intro">This visualizer executes Gale-Shapley step by step and explains why the matching is stable.</p>
+        <ul>
+          <li data-i18n="help_li_1">Choose a preset or build your own instance using the editable tables.</li>
+          <li data-i18n="help_li_2">Pick the proposer side, then use Run step or Auto run.</li>
+          <li data-i18n="help_li_3">Inspect highlighted preference tables and the bipartite graph animation.</li>
+          <li data-i18n="help_li_4">Use the Curves tab to compare random, inverse, easy, and worst-case families.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <div id="referencesOverlay" class="modal-overlay" role="dialog" aria-modal="true" hidden>
+    <div class="modal-card panel">
+      <div class="modal-header">
+        <h2 data-i18n="references_title">References</h2>
+        <button id="referencesCloseBtn" class="secondary" data-i18n="close_btn">Close</button>
+      </div>
+      <div class="modal-content">
+        <p><strong data-i18n="ref_main">Main references</strong></p>
+        <ol>
+          <li><em>Algorithm Design</em>, Jon Kleinberg and Éva Tardos.</li>
+          <li><a href="https://www.cs.princeton.edu/~wayne/kleinberg-tardos/pdf/01DemoGaleShapley.pdf" target="_blank" rel="noopener noreferrer">Princeton demo: Gale-Shapley</a>.</li>
+          <li><a href="https://github.com/BrunoGrisci/stable-matching-visualizer" target="_blank" rel="noopener noreferrer">Project repository</a>.</li>
+        </ol>
+        <p><strong data-i18n="see_more_algorithms">See more algorithms</strong></p>
+        <p><a href="https://github.com/BrunoGrisci/projeto-e-analise-de-algoritmos" target="_blank" rel="noopener noreferrer">https://github.com/BrunoGrisci/projeto-e-analise-de-algoritmos</a></p>
+        <p>
+          <strong data-i18n="references_thanks_prefix">Thanks to Dr. Luciana Salete Buriol</strong>
+          (<a href="https://www.linkedin.com/in/luciana-buriol-8a50975/" target="_blank" rel="noopener noreferrer">LinkedIn</a>),
+          <span data-i18n="references_thanks_suffix">who first taught me about this algorithm.</span>
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <footer>
+    <p id="footerCredits">
+      &copy; 2026
+      <a href="https://brunogrisci.github.io/" target="_blank" rel="noopener noreferrer">Prof. Bruno Iochins Grisci</a>
+      &mdash;
+      <a href="https://www.inf.ufrgs.br/site/" target="_blank" rel="noopener noreferrer">Instituto de Informática</a>,
+      <a href="https://www.ufrgs.br/site/" target="_blank" rel="noopener noreferrer">UFRGS</a>.
+    </p>
+    <p id="footerProject">
+      <span data-i18n="footer_repo">Project repository:</span>
+      <a href="https://github.com/BrunoGrisci/stable-matching-visualizer" target="_blank" rel="noopener noreferrer">stable-matching-visualizer</a>
+      &mdash;
+      <a href="https://github.com/BrunoGrisci/stable-matching-visualizer/blob/main/LICENSE" target="_blank" rel="noopener noreferrer" data-i18n="footer_license">MIT License</a>
+      &mdash;
+      <a href="#" id="referencesLink" data-i18n="footer_references">References</a>
+    </p>
+    <p data-i18n="footer_ai">Developed with assistance from GPT-5.3-Codex.</p>
+  </footer>
+
+  <script src="galeshapley/js/i18n.js"></script>
+  <script src="galeshapley/js/algorithms.js"></script>
+  <script src="galeshapley/js/main.js"></script>
+</body>
+</html>
