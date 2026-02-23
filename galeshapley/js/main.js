@@ -83,6 +83,7 @@
 
     variantSelect: document.getElementById('variantSelect'),
     presetSelect: document.getElementById('presetSelect'),
+    presetHplOption: document.querySelector('#presetSelect option[value="hpl_spl"]'),
     pairsInput: document.getElementById('pairsInput'),
     goodCountInput: document.getElementById('goodCountInput'),
     proposerSelect: document.getElementById('proposerSelect'),
@@ -113,6 +114,7 @@
     exportCsvBtn: document.getElementById('exportCsvBtn'),
 
     statusBar: document.getElementById('statusBar'),
+    advancedDetails: document.getElementById('advancedDetails'),
 
     proposalCount: document.getElementById('proposalCount'),
     engagedCount: document.getElementById('engagedCount'),
@@ -133,6 +135,8 @@
     dsDisplay: document.getElementById('dsDisplay'),
     stepLog: document.getElementById('stepLog'),
 
+    menEditorTableEl: document.getElementById('menEditorTable'),
+    womenEditorTableEl: document.getElementById('womenEditorTable'),
     menEditorTable: document.getElementById('menEditorTable').querySelector('tbody'),
     womenEditorTable: document.getElementById('womenEditorTable').querySelector('tbody'),
     addManRowBtn: document.getElementById('addManRowBtn'),
@@ -425,16 +429,41 @@
     els.presetNote.textContent = t(presetKeyMap[state.preset] || 'preset_note_random');
   }
 
+  function updatePresetAvailability() {
+    const variant = els.variantSelect.value;
+    const allowHpl = variant === 'classic';
+
+    if (els.presetHplOption) {
+      els.presetHplOption.hidden = !allowHpl;
+      els.presetHplOption.disabled = !allowHpl;
+    }
+
+    if (!allowHpl && els.presetSelect.value === 'hpl_spl') {
+      els.presetSelect.value = 'random';
+    }
+
+    state.preset = els.presetSelect.value;
+  }
+
   function updateVariantFieldsVisibility() {
     const variant = els.variantSelect.value;
+    updatePresetAvailability();
     const preset = els.presetSelect.value;
 
-    const usesN = variant === 'good_bad' || preset === 'random' || preset === 'inverse' || preset === 'easy';
+    const usesN = variant === 'good_bad' || preset === 'random' || preset === 'inverse' || preset === 'easy' || preset === 'worst_case_demo';
+    const showCap = variant === 'capacity';
+    const showCategory = variant === 'good_bad';
 
     els.pairsField.classList.toggle('hidden', !usesN);
     els.goodCountField.classList.toggle('hidden', variant !== 'good_bad');
     els.forbiddenField.classList.toggle('hidden', variant !== 'forbidden');
     els.capacityField.classList.toggle('hidden', variant !== 'capacity');
+    els.advancedDetails.hidden = variant === 'classic';
+
+    els.menEditorTableEl.classList.toggle('hide-cap-col', !showCap);
+    els.womenEditorTableEl.classList.toggle('hide-cap-col', !showCap);
+    els.menEditorTableEl.classList.toggle('hide-cat-col', !showCategory);
+    els.womenEditorTableEl.classList.toggle('hide-cat-col', !showCategory);
   }
 
   function formatPartnerList(list) {
@@ -493,13 +522,41 @@
     return String(bestRank + 1);
   }
 
+  function personCategory(side, name) {
+    if (!state.instance || state.variant !== 'good_bad') {
+      return '';
+    }
+
+    const map = side === 'men' ? state.instance.menCategory : state.instance.womenCategory;
+    const value = String(map && map[name] ? map[name] : '').trim().toLowerCase();
+    return value === 'good' || value === 'bad' ? value : '';
+  }
+
+  function graphClothesColor(side, name, isExhausted) {
+    if (isExhausted) {
+      return '#9d5b5b';
+    }
+
+    const category = personCategory(side, name);
+    if (category === 'good') {
+      return side === 'men' ? '#2f9f72' : '#62c88f';
+    }
+    if (category === 'bad') {
+      return side === 'men' ? '#7453b4' : '#a385db';
+    }
+
+    return side === 'men' ? 'var(--graph-men)' : 'var(--graph-women)';
+  }
+
   function createEditorRow(side, rowData = {}) {
     const row = document.createElement('tr');
 
     const nameCell = document.createElement('td');
     const prefsCell = document.createElement('td');
     const capCell = document.createElement('td');
+    capCell.className = 'editor-cap-col';
     const catCell = document.createElement('td');
+    catCell.className = 'editor-cat-col';
     const delCell = document.createElement('td');
 
     const nameInput = document.createElement('input');
@@ -514,14 +571,29 @@
 
     const capInput = document.createElement('input');
     capInput.type = 'number';
-    capInput.min = '0';
+    capInput.min = '1';
     capInput.step = '1';
     capInput.value = rowData.cap != null ? String(rowData.cap) : '1';
 
     const catInput = document.createElement('input');
-    catInput.type = 'text';
-    catInput.value = rowData.category || '';
-    catInput.placeholder = 'good/bad';
+    catInput.type = 'hidden';
+    const catToggle = document.createElement('button');
+    catToggle.type = 'button';
+    catToggle.className = 'secondary category-toggle';
+    const normalizedCategory = String(rowData.category || '').trim().toLowerCase() === 'bad' ? 'bad' : 'good';
+
+    const setCategory = (value) => {
+      const normalized = value === 'bad' ? 'bad' : 'good';
+      catInput.value = normalized;
+      catToggle.dataset.category = normalized;
+      catToggle.textContent = normalized;
+      catToggle.setAttribute('aria-label', `category ${normalized}`);
+    };
+
+    catToggle.addEventListener('click', () => {
+      setCategory(catInput.value === 'good' ? 'bad' : 'good');
+    });
+    setCategory(normalizedCategory);
 
     const delBtn = document.createElement('button');
     delBtn.type = 'button';
@@ -533,6 +605,7 @@
     prefsCell.appendChild(prefsInput);
     capCell.appendChild(capInput);
     catCell.appendChild(catInput);
+    catCell.appendChild(catToggle);
     delCell.appendChild(delBtn);
 
     row.appendChild(nameCell);
@@ -567,14 +640,17 @@
     }
   }
 
-  function parseEditorRows(tbody, side) {
+  function parseEditorRows(tbody, side, options = {}) {
+    const includeCap = Boolean(options.includeCap);
+    const includeCategory = Boolean(options.includeCategory);
+
     const names = [];
     const prefs = {};
     const cap = {};
     const category = {};
 
     for (const tr of tbody.querySelectorAll('tr')) {
-      const inputs = tr.querySelectorAll('input');
+      const inputs = tr.querySelectorAll('input, select');
       if (inputs.length < 4) {
         continue;
       }
@@ -589,13 +665,17 @@
         .map((x) => x.trim())
         .filter(Boolean);
 
-      const capValue = Number.parseInt(String(inputs[2].value || '1'), 10);
-      const catValue = String(inputs[3].value || '').trim().toLowerCase();
+      const capValue = includeCap
+        ? Number.parseInt(String(inputs[2].value || '1'), 10)
+        : 1;
+      const catValue = includeCategory
+        ? String(inputs[3].value || '').trim().toLowerCase()
+        : '';
 
       names.push(name);
       prefs[name] = prefList;
-      cap[name] = Number.isFinite(capValue) ? Math.max(0, capValue) : 1;
-      category[name] = catValue;
+      cap[name] = includeCap && Number.isFinite(capValue) ? Math.max(1, capValue) : 1;
+      category[name] = includeCategory ? catValue : '';
     }
 
     return side === 'men'
@@ -611,7 +691,7 @@
       return GSAlgorithms.presets.hplSpl();
     }
     if (preset === 'worst_case_demo') {
-      return GSAlgorithms.presets.homensMulheres();
+      return GSAlgorithms.presets.worstCase(n);
     }
     if (preset === 'inverse') {
       return GSAlgorithms.presets.inverse(n);
@@ -634,7 +714,8 @@
     let instance;
 
     if (state.variant === 'good_bad') {
-      instance = GSAlgorithms.presets.goodBad(n, k);
+      const goodBadSeed = Date.now();
+      instance = GSAlgorithms.presets.goodBadFromPreset(state.preset, n, k, goodBadSeed);
     } else {
       instance = getBasePresetInstance();
     }
@@ -1090,6 +1171,7 @@
         const prefList = prefsMap[name] || [];
         const partners = new Set(partnersMap[name] || []);
         const rowClass = name === activeRowName ? 'active-row' : '';
+        const rowCategory = personCategory(side, name);
         const becameSingle = state.recentlySingle.has(name) && partners.size === 0;
         let marker = '';
         if (becameSingle) {
@@ -1109,6 +1191,11 @@
           }
           if (partners.has(candidate)) {
             classes.push('engaged');
+            const candidateSide = side === 'men' ? 'women' : 'men';
+            const candidateCategory = personCategory(candidateSide, candidate);
+            if (candidateCategory) {
+              classes.push(`engaged-${candidateCategory}`);
+            }
           }
           if (name === activeRowName && candidate === activeTarget) {
             classes.push('proposed');
@@ -1116,9 +1203,17 @@
           prefCells.push(`<td class="${classes.join(' ')}">${escapeHtml(candidate)}</td>`);
         }
 
+        const nameCellClasses = ['name-cell'];
+        if (rowCategory) {
+          nameCellClasses.push(`cat-${rowCategory}`);
+        }
+        if (partners.size > 0) {
+          nameCellClasses.push('engaged');
+        }
+
         return `
           <tr class="${rowClass}">
-            <td class="name-cell">${escapeHtml(name)} ${marker}</td>
+            <td class="${nameCellClasses.join(' ')}">${escapeHtml(name)} ${marker}</td>
             ${prefCells.join('')}
           </tr>
         `;
@@ -1194,7 +1289,7 @@
     const trait = state.traits[name] || { body: 0, hat: 0, glasses: false, colorOffset: 0 };
     const baseHue = side === 'men' ? 200 : 330;
     const hue = (baseHue + trait.colorOffset) % 360;
-    const bodyColor = isExhausted ? '#9d5b5b' : `hsl(${hue}deg 62% 56%)`;
+    const bodyColor = graphClothesColor(side, name, isExhausted);
     const headColor = isExhausted ? '#d5b4b4' : `hsl(${(hue + 16) % 360}deg 70% 77%)`;
     const strokeColor = isExhausted ? '#7a3f3f' : 'rgba(0,0,0,0.25)';
 
@@ -1329,11 +1424,12 @@
         const recentlySingle = state.recentlySingle.has(man) && partners.length === 0;
 
         if (!avatars) {
+          const clothesColor = graphClothesColor('men', man, exhausted);
           return `
             ${recentlySingle
               ? `<text class="graph-status-marker graph-status-single" x="${coord.x}" y="${coord.y - 12}" text-anchor="middle">∅</text>`
               : (partners.length ? `<text class="graph-status-marker graph-status-engaged" x="${coord.x}" y="${coord.y - 12}" text-anchor="middle">O</text>` : '')}
-            <circle cx="${coord.x}" cy="${coord.y}" r="6" fill="${exhausted ? '#9d5b5b' : 'var(--graph-men)'}" stroke="rgba(0,0,0,0.24)" stroke-width="1"></circle>
+            <circle cx="${coord.x}" cy="${coord.y}" r="6" fill="${clothesColor}" stroke="rgba(0,0,0,0.24)" stroke-width="1"></circle>
             ${showNames ? `<text class="graph-node-label" x="${coord.x - 12}" y="${coord.y + 4}" text-anchor="end">${escapeHtml(man)}</text>` : ''}
             <text class="graph-rank-label" x="${coord.x - 24}" y="${coord.y - 8}" text-anchor="end">${escapeHtml(t('legend_rank'))}:${escapeHtml(rank)}</text>
           `;
@@ -1353,11 +1449,12 @@
         const recentlySingle = state.recentlySingle.has(woman) && partners.length === 0;
 
         if (!avatars) {
+          const clothesColor = graphClothesColor('women', woman, exhausted);
           return `
             ${recentlySingle
               ? `<text class="graph-status-marker graph-status-single" x="${coord.x}" y="${coord.y - 12}" text-anchor="middle">∅</text>`
               : (partners.length ? `<text class="graph-status-marker graph-status-engaged" x="${coord.x}" y="${coord.y - 12}" text-anchor="middle">O</text>` : '')}
-            <circle cx="${coord.x}" cy="${coord.y}" r="6" fill="${exhausted ? '#9d5b5b' : 'var(--graph-women)'}" stroke="rgba(0,0,0,0.24)" stroke-width="1"></circle>
+            <circle cx="${coord.x}" cy="${coord.y}" r="6" fill="${clothesColor}" stroke="rgba(0,0,0,0.24)" stroke-width="1"></circle>
             ${showNames ? `<text class="graph-node-label" x="${coord.x + 12}" y="${coord.y + 4}" text-anchor="start">${escapeHtml(woman)}</text>` : ''}
             <text class="graph-rank-label" x="${coord.x + 24}" y="${coord.y - 8}" text-anchor="start">${escapeHtml(t('legend_rank'))}:${escapeHtml(rank)}</text>
           `;
@@ -1386,13 +1483,19 @@
       state.insightsCache = GSAlgorithms.analyzeSnapshot(state.instance, state.proposerSide, snapshot);
     }
 
+    const showGoodBadInsight = state.variant === 'good_bad';
+
     if (!snapshot.done || !state.insightsCache) {
-      els.insightsGrid.innerHTML = [
+      const pendingCards = [
         insightCardHtml('neutral', t('insight_perfect_title'), t('insight_pending')),
         insightCardHtml('neutral', t('insight_stable_title'), t('insight_pending')),
         insightCardHtml('neutral', t('insight_terminates_title'), t('insight_pending')),
         insightCardHtml('neutral', t('insight_optimal_title'), t('insight_pending'))
-      ].join('');
+      ];
+      if (showGoodBadInsight) {
+        pendingCards.push(insightCardHtml('neutral', t('insight_good_bad_title'), t('insight_pending')));
+      }
+      els.insightsGrid.innerHTML = pendingCards.join('');
       return;
     }
 
@@ -1406,26 +1509,43 @@
       bound: insight.terminationBound
     });
 
-    let optimalText = t('insight_optimal_not_verified');
+    let optimalText = t('insight_optimal_not_applicable');
     let optimalClass = 'neutral';
 
-    if (insight.optimality.mode === 'exhaustive') {
+    if (insight.optimality.mode === 'current') {
       const ok = Boolean(insight.optimality.proposerOptimal) && Boolean(insight.optimality.receiverPessimal);
       optimalText = ok
-        ? `${t('insight_true')} - ${t('insight_optimal_proved', { count: insight.optimality.stableCount })}`
+        ? `${t('insight_true')} - ${t('insight_optimal_current')}`
         : t('insight_false');
       optimalClass = ok ? 'good' : 'bad';
-    } else if (insight.optimality.mode === 'theorem') {
-      optimalText = t('insight_optimal_theorem');
-      optimalClass = 'neutral';
     }
 
-    els.insightsGrid.innerHTML = [
+    const cards = [
       insightCardHtml(insight.perfect ? 'good' : 'bad', t('insight_perfect_title'), perfectText),
       insightCardHtml(insight.instabilityCount === 0 ? 'good' : 'bad', t('insight_stable_title'), stableText),
       insightCardHtml(insight.terminatesWithinBound ? 'good' : 'bad', t('insight_terminates_title'), termText),
       insightCardHtml(optimalClass, t('insight_optimal_title'), optimalText)
-    ].join('');
+    ];
+
+    if (showGoodBadInsight) {
+      let goodBadText = t('insight_good_bad_not_applicable');
+      let goodBadClass = 'neutral';
+      const property = insight.goodBadProperty;
+
+      if (property && property.mode === 'current') {
+        if (property.holds) {
+          goodBadText = `${t('insight_true')} - ${t('insight_good_bad_current')}`;
+          goodBadClass = 'good';
+        } else {
+          goodBadText = t('insight_false');
+          goodBadClass = 'bad';
+        }
+      }
+
+      cards.push(insightCardHtml(goodBadClass, t('insight_good_bad_title'), goodBadText));
+    }
+
+    els.insightsGrid.innerHTML = cards.join('');
   }
 
   function insightCardHtml(type, title, value) {
@@ -1676,11 +1796,18 @@
   }
 
   function applyTablesToInstance() {
-    const menData = parseEditorRows(els.menEditorTable, 'men');
-    const womenData = parseEditorRows(els.womenEditorTable, 'women');
+    state.variant = els.variantSelect.value;
+    const includeCap = state.variant === 'capacity';
+    const includeCategory = state.variant === 'good_bad';
+    const includeForbidden = state.variant === 'forbidden';
+
+    const menData = parseEditorRows(els.menEditorTable, 'men', { includeCap, includeCategory });
+    const womenData = parseEditorRows(els.womenEditorTable, 'women', { includeCap, includeCategory });
 
     try {
-      const forbidden = GSAlgorithms.parseForbiddenText(els.forbiddenInput.value);
+      const forbidden = includeForbidden
+        ? GSAlgorithms.parseForbiddenText(els.forbiddenInput.value)
+        : new Set();
       const instance = GSAlgorithms.normalizeInstance({
         name: 'custom',
         ...menData,
@@ -1752,40 +1879,41 @@
 
       const n = points[i];
       let sumRandom = 0;
-      let sumInverse = 0;
-      let sumEasy = 0;
-      let sumWorstCase = 0;
+
+      const inverseInst = GSAlgorithms.presets.inverse(n);
+      const easyInst = GSAlgorithms.presets.easy(n);
+      const worstInst = GSAlgorithms.presets.worstCase(n);
+
+      const eInverse = new GSAlgorithms.GSEngine(inverseInst, state.proposerSide);
+      const eEasy = new GSAlgorithms.GSEngine(easyInst, state.proposerSide);
+      const eWorst = new GSAlgorithms.GSEngine(worstInst, state.proposerSide);
+
+      eInverse.runToEnd();
+      eEasy.runToEnd();
+      eWorst.runToEnd();
+
+      const inverseValue = eInverse.proposalCount;
+      const easyValue = eEasy.proposalCount;
+      const worstValue = eWorst.proposalCount;
 
       for (let r = 0; r < repeats; r += 1) {
         const seed = (n * 10007) + (r * 97) + i;
 
         const randomInst = GSAlgorithms.presets.random(n, seed);
-        const inverseInst = GSAlgorithms.presets.inverse(n);
-        const easyInst = GSAlgorithms.presets.easy(n);
-        const worstInst = GSAlgorithms.presets.worstCase(n);
 
         const eRandom = new GSAlgorithms.GSEngine(randomInst, state.proposerSide);
-        const eInverse = new GSAlgorithms.GSEngine(inverseInst, state.proposerSide);
-        const eEasy = new GSAlgorithms.GSEngine(easyInst, state.proposerSide);
-        const eWorst = new GSAlgorithms.GSEngine(worstInst, state.proposerSide);
 
         eRandom.runToEnd();
-        eInverse.runToEnd();
-        eEasy.runToEnd();
-        eWorst.runToEnd();
 
         sumRandom += eRandom.proposalCount;
-        sumInverse += eInverse.proposalCount;
-        sumEasy += eEasy.proposalCount;
-        sumWorstCase += eWorst.proposalCount;
       }
 
       state.curves.rows.push({
         n,
         random: sumRandom / repeats,
-        inverse: sumInverse / repeats,
-        easy: sumEasy / repeats,
-        worstCase: sumWorstCase / repeats,
+        inverse: inverseValue,
+        easy: easyValue,
+        worstCase: worstValue,
         linear: n,
         half: (n * (n + 1)) / 2,
         square: n * n,

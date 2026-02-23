@@ -543,6 +543,24 @@ body.code-collapsed #codeColumn {
   white-space: nowrap;
 }
 
+.pref-table .name-cell.cat-good {
+  background: color-mix(in srgb, #43b581 56%, var(--panel));
+  color: color-mix(in srgb, #143326 84%, #0b111a);
+}
+
+.pref-table .name-cell.cat-bad {
+  background: color-mix(in srgb, #8f6fd1 58%, var(--panel));
+  color: color-mix(in srgb, #241835 86%, #0b111a);
+}
+
+.pref-table .name-cell.cat-good.engaged {
+  background: color-mix(in srgb, #7dd7a9 48%, var(--panel));
+}
+
+.pref-table .name-cell.cat-bad.engaged {
+  background: color-mix(in srgb, #b69ae7 50%, var(--panel));
+}
+
 .name-marker {
   display: inline-block;
   margin-left: 0.3rem;
@@ -595,6 +613,16 @@ body.code-collapsed #codeColumn {
 .pref-table td.pref-cell.engaged {
   background: color-mix(in srgb, #ea67c6 32%, var(--panel));
   color: color-mix(in srgb, var(--text) 85%, #111);
+}
+
+.pref-table td.pref-cell.engaged.engaged-good {
+  background: color-mix(in srgb, #76d6a6 34%, var(--panel));
+  color: color-mix(in srgb, var(--text) 88%, #111);
+}
+
+.pref-table td.pref-cell.engaged.engaged-bad {
+  background: color-mix(in srgb, #b39be6 34%, var(--panel));
+  color: color-mix(in srgb, var(--text) 88%, #111);
 }
 
 .pref-table td.pref-cell.proposed {
@@ -850,7 +878,8 @@ body.theme-dark .code-display {
   vertical-align: top;
 }
 
-.editor-table input {
+.editor-table input,
+.editor-table select {
   width: 100%;
   min-width: 60px;
   font-size: 0.75rem;
@@ -861,6 +890,32 @@ body.theme-dark .code-display {
   width: 32px;
   min-width: 32px;
   padding: 0.3rem;
+}
+
+.editor-table .category-toggle {
+  width: 100%;
+  min-width: 72px;
+  text-transform: capitalize;
+  font-size: 0.73rem;
+  padding: 0.3rem 0.5rem;
+}
+
+.editor-table .category-toggle[data-category="good"] {
+  background: color-mix(in srgb, #60c58f 45%, var(--panel));
+  border-color: color-mix(in srgb, #2f9f72 40%, transparent);
+}
+
+.editor-table .category-toggle[data-category="bad"] {
+  background: color-mix(in srgb, #9f82d8 45%, var(--panel));
+  border-color: color-mix(in srgb, #7453b4 40%, transparent);
+}
+
+.editor-table.hide-cap-col .editor-cap-col {
+  display: none;
+}
+
+.editor-table.hide-cat-col .editor-cat-col {
+  display: none;
 }
 
 .bottom-row {

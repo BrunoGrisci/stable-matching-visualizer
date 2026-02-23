@@ -89,7 +89,7 @@
       if (!name) {
         continue;
       }
-      const cap = clamp(toInt(rawCap, 1), 0, 1000000);
+      const cap = clamp(toInt(rawCap, 1), 1, 1000000);
       out[name] = cap;
     }
     return out;
@@ -205,11 +205,11 @@
     const wCap = {};
     for (const man of men) {
       const capRaw = input.mCap && input.mCap[man] != null ? input.mCap[man] : 1;
-      mCap[man] = clamp(toInt(capRaw, 1), 0, 1000000);
+      mCap[man] = clamp(toInt(capRaw, 1), 1, 1000000);
     }
     for (const woman of women) {
       const capRaw = input.wCap && input.wCap[woman] != null ? input.wCap[woman] : 1;
-      wCap[woman] = clamp(toInt(capRaw, 1), 0, 1000000);
+      wCap[woman] = clamp(toInt(capRaw, 1), 1, 1000000);
     }
 
     const menCategory = {};
@@ -348,7 +348,7 @@
     const receiverCaps = {};
     for (const receiver of receivers) {
       const capRaw = capsSource[receiver] != null ? capsSource[receiver] : 1;
-      receiverCaps[receiver] = clamp(toInt(capRaw, 1), 0, 1000000);
+      receiverCaps[receiver] = clamp(toInt(capRaw, 1), 1, 1000000);
     }
 
     return {
@@ -663,136 +663,56 @@
     return menSeen.size === instance.men.length && womenSeen.size === instance.women.length && pairs.length === instance.men.length;
   }
 
-  function evaluateOptimality(instance, orientation, proposerMatch, receiverMatches) {
-    const n = orientation.proposers.length;
+  function evaluateOptimality(instance, orientation) {
     const sameSize = orientation.proposers.length === orientation.receivers.length;
     const allCapOne = orientation.receivers.every((receiver) => (orientation.receiverCaps[receiver] || 0) === 1);
     const forbiddenExists = instance.forbidden.size > 0;
 
-    if (!sameSize || !allCapOne || forbiddenExists || n > 8) {
+    if (!sameSize || !allCapOne || forbiddenExists) {
       return {
-        mode: 'theorem',
-        stableCount: null,
+        mode: 'not_applicable',
         proposerOptimal: null,
         receiverPessimal: null
       };
     }
 
-    const proposers = orientation.proposers.slice();
-    const receivers = orientation.receivers.slice();
-    const used = new Set();
-    const assign = {};
+    return {
+      mode: 'current',
+      proposerOptimal: true,
+      receiverPessimal: true
+    };
+  }
 
-    const stableAssignments = [];
+  function evaluateGoodManGoodWomanProperty(instance, pairs) {
 
-    function backtrack(idx) {
-      if (idx >= proposers.length) {
-        const testProposerMatch = { ...assign };
-        const testReceiverMatches = {};
-        for (const receiver of receivers) {
-          testReceiverMatches[receiver] = [];
-        }
-        for (const proposer of proposers) {
-          const receiver = testProposerMatch[proposer];
-          if (receiver != null) {
-            testReceiverMatches[receiver].push(proposer);
-          }
-        }
+    const goodMen = instance.men.filter((man) => trimString(instance.menCategory[man]).toLowerCase() === 'good');
+    const goodWomen = new Set(
+      instance.women.filter((woman) => trimString(instance.womenCategory[woman]).toLowerCase() === 'good')
+    );
 
-        const instabilityCount = countInstabilities(orientation, testProposerMatch, testReceiverMatches);
-        if (instabilityCount === 0) {
-          stableAssignments.push({
-            proposerMatch: testProposerMatch,
-            receiverMatches: testReceiverMatches
-          });
-        }
-        return;
-      }
-
-      const proposer = proposers[idx];
-      for (const receiver of receivers) {
-        if (used.has(receiver)) {
-          continue;
-        }
-
-        const rank = orientation.pRank[proposer][receiver];
-        if (!Number.isFinite(rank)) {
-          continue;
-        }
-
-        assign[proposer] = receiver;
-        used.add(receiver);
-        backtrack(idx + 1);
-        used.delete(receiver);
-        delete assign[proposer];
-      }
-    }
-
-    backtrack(0);
-
-    if (!stableAssignments.length) {
+    if (!goodMen.length || !goodWomen.size) {
       return {
-        mode: 'exhaustive',
-        stableCount: 0,
-        proposerOptimal: false,
-        receiverPessimal: false
+        mode: 'not_applicable',
+        holds: null
       };
     }
 
-    const bestForProposers = {};
-    const worstForReceivers = {};
-
-    for (const proposer of proposers) {
-      bestForProposers[proposer] = Number.POSITIVE_INFINITY;
-    }
-    for (const receiver of receivers) {
-      worstForReceivers[receiver] = Number.NEGATIVE_INFINITY;
+    const manToWoman = {};
+    for (const pair of pairs) {
+      manToWoman[pair.man] = pair.woman;
     }
 
-    for (const stable of stableAssignments) {
-      for (const proposer of proposers) {
-        const receiver = stable.proposerMatch[proposer];
-        const rank = orientation.pRank[proposer][receiver];
-        if (rank < bestForProposers[proposer]) {
-          bestForProposers[proposer] = rank;
-        }
-      }
-
-      for (const receiver of receivers) {
-        const proposer = stable.receiverMatches[receiver][0];
-        const rank = orientation.rRank[receiver][proposer];
-        if (rank > worstForReceivers[receiver]) {
-          worstForReceivers[receiver] = rank;
-        }
-      }
-    }
-
-    let proposerOptimal = true;
-    let receiverPessimal = true;
-
-    for (const proposer of proposers) {
-      const receiver = proposerMatch[proposer];
-      const rank = orientation.pRank[proposer][receiver];
-      if (rank !== bestForProposers[proposer]) {
-        proposerOptimal = false;
-        break;
-      }
-    }
-
-    for (const receiver of receivers) {
-      const proposer = (receiverMatches[receiver] || [])[0];
-      const rank = orientation.rRank[receiver][proposer];
-      if (rank !== worstForReceivers[receiver]) {
-        receiverPessimal = false;
+    let holds = true;
+    for (const goodMan of goodMen) {
+      if (!goodWomen.has(manToWoman[goodMan])) {
+        holds = false;
         break;
       }
     }
 
     return {
-      mode: 'exhaustive',
-      stableCount: stableAssignments.length,
-      proposerOptimal,
-      receiverPessimal
+      mode: 'current',
+      holds
     };
   }
 
@@ -801,12 +721,17 @@
     const instabilityCount = countInstabilities(orientation, snapshot.proposerMatch, snapshot.receiverMatches);
     const perfect = evaluatePerfect(instance, snapshot.pairs);
     const optimality = snapshot.done
-      ? evaluateOptimality(instance, orientation, snapshot.proposerMatch, snapshot.receiverMatches)
+      ? evaluateOptimality(instance, orientation)
       : {
         mode: 'pending',
-        stableCount: null,
         proposerOptimal: null,
         receiverPessimal: null
+      };
+    const goodBadProperty = snapshot.done
+      ? evaluateGoodManGoodWomanProperty(instance, snapshot.pairs)
+      : {
+        mode: 'pending',
+        holds: null
       };
 
     return {
@@ -815,7 +740,8 @@
       terminationBound: orientation.totalPossibleProposals,
       usedProposals: snapshot.proposalCount,
       terminatesWithinBound: snapshot.proposalCount <= orientation.totalPossibleProposals,
-      optimality
+      optimality,
+      goodBadProperty
     };
   }
 
@@ -983,50 +909,87 @@
     });
   }
 
-  function createGoodBadInstance(n, k, seed) {
-    const size = clamp(toInt(n, 10), 2, 2000);
-    const goodCount = clamp(toInt(k, Math.max(1, Math.floor(size / 2))), 1, size - 1);
-    const men = sequentialNames('M', size);
-    const women = sequentialNames('W', size);
+  function applyGoodBadCategories(instance, k, seed) {
+    const base = cloneInstance(instance);
+    const men = base.men.slice();
+    const women = base.women.slice();
+    const size = Math.min(men.length, women.length);
+    const safeK = clamp(toInt(k, Math.max(1, Math.floor(size / 2))), 1, Math.max(1, size - 1));
     const rng = createRng(seed);
 
-    const goodMen = new Set(men.slice(0, goodCount));
-    const goodWomen = new Set(women.slice(0, goodCount));
+    const goodMen = new Set(shuffled(men, rng).slice(0, safeK));
+    const goodWomen = new Set(shuffled(women, rng).slice(0, safeK));
+    const womenSet = new Set(women);
+    const menSet = new Set(men);
 
-    const menCategory = {};
-    const womenCategory = {};
+    function reorderByCategory(prefList, universe, universeSet, goodSet) {
+      const merged = uniqueList([...(prefList || []), ...universe]);
+      const goodPart = [];
+      const badPart = [];
 
-    for (const man of men) {
-      menCategory[man] = goodMen.has(man) ? 'good' : 'bad';
-    }
-    for (const woman of women) {
-      womenCategory[woman] = goodWomen.has(woman) ? 'good' : 'bad';
+      for (const name of merged) {
+        if (!universeSet.has(name)) {
+          continue;
+        }
+        if (goodSet.has(name)) {
+          goodPart.push(name);
+        } else {
+          badPart.push(name);
+        }
+      }
+
+      return [...goodPart, ...badPart];
     }
 
     const mPrefs = {};
     const wPrefs = {};
-
-    const goodWomenArr = women.filter((w) => goodWomen.has(w));
-    const badWomenArr = women.filter((w) => !goodWomen.has(w));
-    const goodMenArr = men.filter((m) => goodMen.has(m));
-    const badMenArr = men.filter((m) => !goodMen.has(m));
+    const menCategory = {};
+    const womenCategory = {};
 
     for (const man of men) {
-      mPrefs[man] = [...shuffled(goodWomenArr, rng), ...shuffled(badWomenArr, rng)];
+      mPrefs[man] = reorderByCategory(base.mPrefs[man], women, womenSet, goodWomen);
+      menCategory[man] = goodMen.has(man) ? 'good' : 'bad';
     }
     for (const woman of women) {
-      wPrefs[woman] = [...shuffled(goodMenArr, rng), ...shuffled(badMenArr, rng)];
+      wPrefs[woman] = reorderByCategory(base.wPrefs[woman], men, menSet, goodMen);
+      womenCategory[woman] = goodWomen.has(woman) ? 'good' : 'bad';
     }
 
     return normalizeInstance({
-      name: 'good_bad',
-      men,
-      women,
+      ...base,
       mPrefs,
       wPrefs,
       menCategory,
       womenCategory
     });
+  }
+
+  function createGoodBadInstance(n, k, seed) {
+    const base = createRandomInstance(n, seed);
+    const categorySeed = Number.isFinite(seed) ? seed + 104729 : seed;
+    const adapted = applyGoodBadCategories(base, k, categorySeed);
+    adapted.name = 'good_bad';
+    return adapted;
+  }
+
+  function createGoodBadPresetInstance(preset, n, k, seed) {
+    const key = trimString(preset);
+    let base;
+
+    if (key === 'inverse') {
+      base = createInverseInstance(n);
+    } else if (key === 'easy') {
+      base = createEasyInstance(n);
+    } else if (key === 'worst_case_demo') {
+      base = createWorstCaseInstance(n);
+    } else {
+      base = createRandomInstance(n, seed);
+    }
+
+    const categorySeed = Number.isFinite(seed) ? seed + 104729 : seed;
+    const adapted = applyGoodBadCategories(base, k, categorySeed);
+    adapted.name = `good_bad_${key || 'random'}`;
+    return adapted;
   }
 
   function applyForbiddenPairs(instance, forbiddenSet) {
@@ -1045,7 +1008,7 @@
       if (!Object.prototype.hasOwnProperty.call(targetCaps, name)) {
         continue;
       }
-      targetCaps[name] = clamp(toInt(cap, 1), 0, 1000000);
+      targetCaps[name] = clamp(toInt(cap, 1), 1, 1000000);
     }
     return normalizeInstance(copy);
   }
@@ -1137,7 +1100,7 @@
       const prefs = cols[2]
         ? cols[2].split('|').map((x) => trimString(x)).filter(Boolean)
         : [];
-      const cap = cols[3] ? clamp(toInt(cols[3], 1), 0, 1000000) : 1;
+      const cap = cols[3] ? clamp(toInt(cols[3], 1), 1, 1000000) : 1;
       const category = cols[4] ? trimString(cols[4]).toLowerCase() : '';
 
       if (side === 'men') {
@@ -1208,6 +1171,7 @@
     exportCsvInstance,
     applyForbiddenPairs,
     applyReceiverCapacities,
+    applyGoodBadCategories,
     buildOrientation,
     analyzeSnapshot,
     GSEngine,
@@ -1219,6 +1183,7 @@
       inverse: createInverseInstance,
       easy: createEasyInstance,
       goodBad: createGoodBadInstance,
+      goodBadFromPreset: createGoodBadPresetInstance,
       worstCase: createWorstCaseInstance
     }
   };

@@ -31,7 +31,7 @@ Ferramenta web interativa para estudar o algoritmo de Gale-Shapley (Problema do 
   - mulheres solteiras
 - Fontes de instância:
   - instância demo HPL/SPL
-  - instância de pior caso HOMENS/MULHERES (rotulada como `Pior caso`)
+  - gerador de pior caso (rotulado como `Pior caso`, com `n` customizável)
   - geradores aleatório, inverso e fácil (com `n` customizável)
   - tabelas editáveis de homens/mulheres
   - importação/exportação CSV
@@ -81,7 +81,7 @@ Onde:
 
 - `group` é `men` ou `women`
 - `prefs` usa separador `|` (exemplo: `W1|W2|W3`)
-- `capacity` é opcional (padrão `1`)
+- `capacity` é opcional (padrão `1`) e deve ser `>= 1`
 - `category` é opcional (`good` / `bad`)
 
 Exemplo:

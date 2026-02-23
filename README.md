@@ -31,7 +31,7 @@ Interactive web tool for studying the Gale-Shapley algorithm (Stable Matching Pr
   - single women
 - Instance sources:
   - HPL/SPL demo instance
-  - HOMENS/MULHERES worst-case instance (labeled as `Worst case`)
+  - worst-case generator (labeled as `Worst case`, custom `n`)
   - random, inverse, and easy generators (custom `n`)
   - editable men/women tables
   - CSV import/export
@@ -81,7 +81,7 @@ Where:
 
 - `group` is `men` or `women`
 - `prefs` uses `|` separator (example: `W1|W2|W3`)
-- `capacity` is optional (default `1`)
+- `capacity` is optional (default `1`) and must be `>= 1`
 - `category` is optional (`good` / `bad`)
 
 Example:

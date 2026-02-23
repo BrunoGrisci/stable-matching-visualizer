@@ -58,10 +58,25 @@
           <input id="pairsInput" type="number" min="2" max="2000" step="1" value="5" inputmode="numeric">
         </div>
 
-        <div id="goodCountField" class="field-slot">
-          <label for="goodCountInput" data-i18n="good_count_label">Good count (k)</label>
-          <input id="goodCountInput" type="number" min="1" max="2000" step="1" value="2" inputmode="numeric">
-        </div>
+        <details id="advancedDetails" open>
+          <summary data-i18n="advanced_summary">Variant parameters</summary>
+          <div class="field-grid">
+            <div id="goodCountField" class="field-slot">
+              <label for="goodCountInput" data-i18n="good_count_label">Good count (k)</label>
+              <input id="goodCountInput" type="number" min="1" max="2000" step="1" value="2" inputmode="numeric">
+            </div>
+
+            <div id="forbiddenField" class="field-slot">
+              <label for="forbiddenInput" data-i18n="forbidden_label">Forbidden pairs (man-woman, comma separated)</label>
+              <textarea id="forbiddenInput" rows="2" placeholder="M1-W2, M3-W1"></textarea>
+            </div>
+
+            <div id="capacityField" class="field-slot">
+              <label for="capacityInput" data-i18n="capacity_label">Capacities (receiver:cap, comma separated)</label>
+              <textarea id="capacityInput" rows="2" placeholder="Atlanta:2, Boston:1"></textarea>
+            </div>
+          </div>
+        </details>
 
         <label for="proposerSelect" data-i18n="proposer_label">Proposer side</label>
         <select id="proposerSelect">
@@ -80,21 +95,6 @@
         <button id="loadPresetBtn" data-i18n="load_preset_btn">Load instance</button>
         <button id="resetRunBtn" class="secondary" data-i18n="reset_btn">Reset run</button>
       </div>
-
-      <details id="advancedDetails" open>
-        <summary data-i18n="advanced_summary">Variant parameters</summary>
-        <div class="field-grid">
-          <div id="forbiddenField" class="field-slot">
-            <label for="forbiddenInput" data-i18n="forbidden_label">Forbidden pairs (man-woman, comma separated)</label>
-            <textarea id="forbiddenInput" rows="2" placeholder="M1-W2, M3-W1"></textarea>
-          </div>
-
-          <div id="capacityField" class="field-slot">
-            <label for="capacityInput" data-i18n="capacity_label">Capacities (receiver:cap, comma separated)</label>
-            <textarea id="capacityInput" rows="2" placeholder="Atlanta:2, Boston:1"></textarea>
-          </div>
-        </div>
-      </details>
 
       <div class="field-grid two">
         <label for="speedSelect" data-i18n="speed_label">Auto speed</label>
@@ -203,8 +203,8 @@
                 <tr>
                   <th data-i18n="editor_col_name">Name</th>
                   <th data-i18n="editor_col_prefs">Preferences (comma separated)</th>
-                  <th data-i18n="editor_col_cap">Cap</th>
-                  <th data-i18n="editor_col_cat">Category</th>
+                  <th class="editor-cap-col" data-i18n="editor_col_cap">Cap</th>
+                  <th class="editor-cat-col" data-i18n="editor_col_cat">Category</th>
                   <th data-i18n="editor_col_del">Del</th>
                 </tr>
               </thead>
@@ -222,8 +222,8 @@
                 <tr>
                   <th data-i18n="editor_col_name">Name</th>
                   <th data-i18n="editor_col_prefs">Preferences (comma separated)</th>
-                  <th data-i18n="editor_col_cap">Cap</th>
-                  <th data-i18n="editor_col_cat">Category</th>
+                  <th class="editor-cap-col" data-i18n="editor_col_cap">Cap</th>
+                  <th class="editor-cat-col" data-i18n="editor_col_cat">Category</th>
                   <th data-i18n="editor_col_del">Del</th>
                 </tr>
               </thead>
@@ -257,7 +257,7 @@
             </div>
 
             <div class="curve-field">
-              <label for="curveRepeatsInput" data-i18n="curve_repeats">Samples per n</label>
+              <label for="curveRepeatsInput" data-i18n="curve_repeats">Repetitions per n (Random only)</label>
               <input id="curveRepeatsInput" type="number" min="1" max="100" step="1" value="3" inputmode="numeric">
             </div>
 
