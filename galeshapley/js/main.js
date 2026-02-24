@@ -1,8 +1,6 @@
 (function () {
   const { GSI18N, GSAlgorithms } = window;
 
-  const CODE_LINE_COUNT = 18;
-
   const state = {
     lang: 'en',
     theme: 'light',
@@ -91,14 +89,24 @@
     proposerWomenOption: document.getElementById('proposerWomenOption'),
     groupLeftInput: document.getElementById('groupLeftInput'),
     groupRightInput: document.getElementById('groupRightInput'),
-    forbiddenInput: document.getElementById('forbiddenInput'),
-    capacityInput: document.getElementById('capacityInput'),
+    forbiddenCountInput: document.getElementById('forbiddenCountInput'),
+    residentCountInput: document.getElementById('residentCountInput'),
+    positionsCountInput: document.getElementById('positionsCountInput'),
+    hospitalCountInput: document.getElementById('hospitalCountInput'),
+    hospitalPosMinInput: document.getElementById('hospitalPosMinInput'),
+    hospitalPosMaxInput: document.getElementById('hospitalPosMaxInput'),
+    residentAppsMinInput: document.getElementById('residentAppsMinInput'),
+    residentAppsMaxInput: document.getElementById('residentAppsMaxInput'),
     speedSelect: document.getElementById('speedSelect'),
 
     pairsField: document.getElementById('pairsField'),
     goodCountField: document.getElementById('goodCountField'),
     forbiddenField: document.getElementById('forbiddenField'),
-    capacityField: document.getElementById('capacityField'),
+    residentCountField: document.getElementById('residentCountField'),
+    positionsCountField: document.getElementById('positionsCountField'),
+    hospitalCountField: document.getElementById('hospitalCountField'),
+    hospitalPosRangeField: document.getElementById('hospitalPosRangeField'),
+    residentAppsRangeField: document.getElementById('residentAppsRangeField'),
 
     scenarioNote: document.getElementById('scenarioNote'),
     presetNote: document.getElementById('presetNote'),
@@ -213,6 +221,76 @@
     return clamped;
   }
 
+  function syncForbiddenCountBounds(maxPairs) {
+    const max = Math.max(0, Number.isFinite(maxPairs) ? maxPairs : 0);
+    els.forbiddenCountInput.min = '0';
+    els.forbiddenCountInput.max = String(max);
+    readNumberInput(els.forbiddenCountInput, Math.min(1, max), 0, max);
+  }
+
+  function readForbiddenCount(maxPairs) {
+    const max = Math.max(0, Number.isFinite(maxPairs) ? maxPairs : 0);
+    syncForbiddenCountBounds(max);
+    return readNumberInput(els.forbiddenCountInput, Math.min(1, max), 0, max);
+  }
+
+  function syncResidentMatchingBounds() {
+    const hospitals = readNumberInput(els.hospitalCountInput, 6, 1, 2000);
+    readNumberInput(els.residentCountInput, 10, 1, 2000);
+
+    const posMin = readNumberInput(els.hospitalPosMinInput, 1, 1, 1000000);
+    els.hospitalPosMaxInput.min = String(posMin);
+    const posMax = readNumberInput(els.hospitalPosMaxInput, Math.max(posMin, 3), posMin, 1000000);
+    els.hospitalPosMinInput.max = String(posMax);
+
+    const minTotal = hospitals * posMin;
+    const maxTotal = hospitals * posMax;
+    els.positionsCountInput.min = String(minTotal);
+    els.positionsCountInput.max = String(maxTotal);
+    readNumberInput(els.positionsCountInput, minTotal, minTotal, maxTotal);
+
+    els.residentAppsMinInput.max = String(hospitals);
+    const appsMin = readNumberInput(els.residentAppsMinInput, 1, 1, hospitals);
+    els.residentAppsMaxInput.min = String(appsMin);
+    els.residentAppsMaxInput.max = String(hospitals);
+    const appsMax = readNumberInput(els.residentAppsMaxInput, Math.max(appsMin, Math.min(3, hospitals)), appsMin, hospitals);
+    els.residentAppsMinInput.max = String(appsMax);
+    readNumberInput(els.residentAppsMinInput, appsMin, 1, appsMax);
+  }
+
+  function readResidentMatchingConfig() {
+    syncResidentMatchingBounds();
+    return {
+      residents: readNumberInput(els.residentCountInput, 10, 1, 2000),
+      positions: readNumberInput(
+        els.positionsCountInput,
+        12,
+        Number.parseInt(els.positionsCountInput.min, 10) || 1,
+        Number.parseInt(els.positionsCountInput.max, 10) || 1000000
+      ),
+      hospitals: readNumberInput(els.hospitalCountInput, 6, 1, 2000),
+      hospitalCapMin: readNumberInput(els.hospitalPosMinInput, 1, 1, 1000000),
+      hospitalCapMax: readNumberInput(
+        els.hospitalPosMaxInput,
+        3,
+        Number.parseInt(els.hospitalPosMaxInput.min, 10) || 1,
+        1000000
+      ),
+      residentAppsMin: readNumberInput(
+        els.residentAppsMinInput,
+        1,
+        1,
+        Number.parseInt(els.residentAppsMinInput.max, 10) || 1
+      ),
+      residentAppsMax: readNumberInput(
+        els.residentAppsMaxInput,
+        3,
+        Number.parseInt(els.residentAppsMaxInput.min, 10) || 1,
+        Number.parseInt(els.residentAppsMaxInput.max, 10) || 1
+      )
+    };
+  }
+
   function getCssVarPx(name, fallback) {
     const raw = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
     const parsed = Number.parseFloat(raw);
@@ -224,6 +302,31 @@
 
   function setCssVarPx(name, value) {
     document.documentElement.style.setProperty(name, `${Math.round(value)}px`);
+  }
+
+  function getScenarioDefaultGroupKeys(variant = state.variant) {
+    if (variant === 'capacity') {
+      return {
+        left: 'side_hospitals',
+        right: 'side_residents'
+      };
+    }
+    return {
+      left: 'side_men',
+      right: 'side_women'
+    };
+  }
+
+  function syncDefaultGroupInputs() {
+    const defaults = getScenarioDefaultGroupKeys(state.variant);
+    if (!els.groupLeftInput.value.trim() || els.groupLeftInput.dataset.default === '1') {
+      els.groupLeftInput.value = t(defaults.left);
+      els.groupLeftInput.dataset.default = '1';
+    }
+    if (!els.groupRightInput.value.trim() || els.groupRightInput.dataset.default === '1') {
+      els.groupRightInput.value = t(defaults.right);
+      els.groupRightInput.dataset.default = '1';
+    }
   }
 
   function setLanguage(lang) {
@@ -247,14 +350,7 @@
     els.langFlag.textContent = state.lang === 'en' ? '🇺🇸' : '🇧🇷';
     els.langToggle.title = state.lang === 'en' ? 'Mudar para Português' : 'Switch to English';
 
-    if (!els.groupLeftInput.value.trim() || els.groupLeftInput.dataset.default === '1') {
-      els.groupLeftInput.value = t('side_men');
-      els.groupLeftInput.dataset.default = '1';
-    }
-    if (!els.groupRightInput.value.trim() || els.groupRightInput.dataset.default === '1') {
-      els.groupRightInput.value = t('side_women');
-      els.groupRightInput.dataset.default = '1';
-    }
+    syncDefaultGroupInputs();
 
     updateToggleButtons();
     updateScenarioPresetNotes();
@@ -270,8 +366,9 @@
   }
 
   function updateDynamicLabels() {
-    state.groupNames.men = String(els.groupLeftInput.value || '').trim() || t('side_men');
-    state.groupNames.women = String(els.groupRightInput.value || '').trim() || t('side_women');
+    const defaults = getScenarioDefaultGroupKeys(state.variant);
+    state.groupNames.men = String(els.groupLeftInput.value || '').trim() || t(defaults.left);
+    state.groupNames.women = String(els.groupRightInput.value || '').trim() || t(defaults.right);
 
     els.menPrefTitle.textContent = t('pref_title_generic', { group: state.groupNames.men });
     els.womenPrefTitle.textContent = t('pref_title_generic', { group: state.groupNames.women });
@@ -449,21 +546,33 @@
     const variant = els.variantSelect.value;
     updatePresetAvailability();
     const preset = els.presetSelect.value;
+    const n = readNumberInput(els.pairsInput, 5, 2, 2000);
 
-    const usesN = variant === 'good_bad' || preset === 'random' || preset === 'inverse' || preset === 'easy' || preset === 'worst_case_demo';
+    const usesN = variant !== 'capacity'
+      && (variant === 'good_bad' || preset === 'random' || preset === 'inverse' || preset === 'easy' || preset === 'worst_case_demo');
     const showCap = variant === 'capacity';
     const showCategory = variant === 'good_bad';
+    const showResidentParams = variant === 'capacity';
 
     els.pairsField.classList.toggle('hidden', !usesN);
     els.goodCountField.classList.toggle('hidden', variant !== 'good_bad');
     els.forbiddenField.classList.toggle('hidden', variant !== 'forbidden');
-    els.capacityField.classList.toggle('hidden', variant !== 'capacity');
+    els.residentCountField.classList.toggle('hidden', !showResidentParams);
+    els.positionsCountField.classList.toggle('hidden', !showResidentParams);
+    els.hospitalCountField.classList.toggle('hidden', !showResidentParams);
+    els.hospitalPosRangeField.classList.toggle('hidden', !showResidentParams);
+    els.residentAppsRangeField.classList.toggle('hidden', !showResidentParams);
     els.advancedDetails.hidden = variant === 'classic';
 
     els.menEditorTableEl.classList.toggle('hide-cap-col', !showCap);
     els.womenEditorTableEl.classList.toggle('hide-cap-col', !showCap);
     els.menEditorTableEl.classList.toggle('hide-cat-col', !showCategory);
     els.womenEditorTableEl.classList.toggle('hide-cat-col', !showCategory);
+    if (variant === 'capacity') {
+      syncResidentMatchingBounds();
+    } else {
+      syncForbiddenCountBounds(n * n);
+    }
   }
 
   function formatPartnerList(list) {
@@ -532,6 +641,20 @@
     return value === 'good' || value === 'bad' ? value : '';
   }
 
+  function isForbiddenPair(man, woman) {
+    if (!state.instance || state.variant !== 'forbidden') {
+      return false;
+    }
+    return state.instance.forbidden.has(`${man}|${woman}`);
+  }
+
+  function isForbiddenCandidate(side, name, candidate) {
+    if (side === 'men') {
+      return isForbiddenPair(name, candidate);
+    }
+    return isForbiddenPair(candidate, name);
+  }
+
   function graphClothesColor(side, name, isExhausted) {
     if (isExhausted) {
       return '#9d5b5b';
@@ -548,6 +671,106 @@
     return side === 'men' ? 'var(--graph-men)' : 'var(--graph-women)';
   }
 
+  function statusSlots(side, name, partnersCount, recentlySingle) {
+    const matched = Math.max(0, Number.parseInt(String(partnersCount || 0), 10) || 0);
+    const isHospitalWithCapacity = state.variant === 'capacity' && side === 'men';
+
+    if (!isHospitalWithCapacity) {
+      if (recentlySingle) {
+        return ['single'];
+      }
+      if (matched > 0) {
+        return ['engaged'];
+      }
+      return [];
+    }
+
+    const rawCap = Number.parseInt(String(state.instance && state.instance.mCap ? state.instance.mCap[name] : 1), 10);
+    const cap = Math.max(1, Number.isFinite(rawCap) ? rawCap : 1);
+    const engagedCount = clamp(matched, 0, cap);
+    const slots = [];
+
+    for (let i = 0; i < engagedCount; i += 1) {
+      slots.push('engaged');
+    }
+
+    if (recentlySingle && cap > 0) {
+      if (slots.length < cap) {
+        slots.push('single');
+      } else if (slots.length > 0) {
+        slots[slots.length - 1] = 'single';
+      } else {
+        slots.push('single');
+      }
+    }
+
+    while (slots.length < cap) {
+      slots.push('open');
+    }
+
+    return slots;
+  }
+
+  function tableStatusMarkerHtml(side, name, partnersCount, recentlySingle) {
+    const slots = statusSlots(side, name, partnersCount, recentlySingle);
+    if (!slots.length) {
+      return '';
+    }
+
+    if (slots.length === 1 && slots[0] !== 'open') {
+      if (slots[0] === 'single') {
+        return `<span class="name-marker single" aria-label="${escapeHtml(t('status_became_single'))}">∅</span>`;
+      }
+      return `<span class="name-marker engaged" aria-label="${escapeHtml(t('legend_engaged'))}">O</span>`;
+    }
+
+    const markerHtml = slots
+      .map((slot) => {
+        if (slot === 'engaged') {
+          return '<span class="name-marker engaged" aria-hidden="true">O</span>';
+        }
+        if (slot === 'single') {
+          return '<span class="name-marker single" aria-hidden="true">∅</span>';
+        }
+        return '<span class="name-marker open" aria-hidden="true">_</span>';
+      })
+      .join('');
+    return `<span class="name-slot-markers" aria-hidden="true">${markerHtml}</span>`;
+  }
+
+  function graphStatusClass(slot) {
+    if (slot === 'single') return 'graph-status-single';
+    if (slot === 'engaged') return 'graph-status-engaged';
+    return 'graph-status-open';
+  }
+
+  function graphStatusChar(slot) {
+    if (slot === 'single') return '∅';
+    if (slot === 'engaged') return 'O';
+    return '_';
+  }
+
+  function graphStatusMarkerSvg(side, name, x, y, partnersCount, recentlySingle, spacing = 10) {
+    const slots = statusSlots(side, name, partnersCount, recentlySingle);
+    if (!slots.length) {
+      return '';
+    }
+
+    if (slots.length === 1) {
+      const slot = slots[0];
+      return `<text class="graph-status-marker ${graphStatusClass(slot)}" x="${x}" y="${y}" text-anchor="middle">${graphStatusChar(slot)}</text>`;
+    }
+
+    const step = spacing;
+    const startX = x - ((slots.length - 1) * step) / 2;
+    return slots
+      .map((slot, idx) => {
+        const slotX = startX + (idx * step);
+        return `<text class="graph-status-marker ${graphStatusClass(slot)}" x="${slotX}" y="${y}" text-anchor="middle">${graphStatusChar(slot)}</text>`;
+      })
+      .join('');
+  }
+
   function createEditorRow(side, rowData = {}) {
     const row = document.createElement('tr');
 
@@ -562,12 +785,16 @@
     const nameInput = document.createElement('input');
     nameInput.type = 'text';
     nameInput.value = rowData.name || '';
-    nameInput.placeholder = side === 'men' ? 'M1' : 'W1';
+    nameInput.placeholder = state.variant === 'capacity'
+      ? (side === 'men' ? 'H1' : 'R1')
+      : (side === 'men' ? 'M1' : 'W1');
 
     const prefsInput = document.createElement('input');
     prefsInput.type = 'text';
     prefsInput.value = rowData.prefs || '';
-    prefsInput.placeholder = side === 'men' ? 'W1, W2, W3' : 'M1, M2, M3';
+    prefsInput.placeholder = state.variant === 'capacity'
+      ? (side === 'men' ? 'R1, R2, R3' : 'H1, H2, H3')
+      : (side === 'men' ? 'W1, W2, W3' : 'M1, M2, M3');
 
     const capInput = document.createElement('input');
     capInput.type = 'number';
@@ -708,6 +935,15 @@
     state.preset = els.presetSelect.value;
     state.proposerSide = els.proposerSelect.value === 'women' ? 'women' : 'men';
 
+    if (state.variant === 'capacity') {
+      const config = readResidentMatchingConfig();
+      return GSAlgorithms.createResidentMatchingInstance({
+        preset: state.preset,
+        ...config,
+        seed: state.preset === 'random' ? Date.now() : 314159
+      });
+    }
+
     const n = readNumberInput(els.pairsInput, 5, 2, 2000);
     const k = readNumberInput(els.goodCountInput, Math.max(1, Math.floor(n / 2)), 1, Math.max(1, n - 1));
 
@@ -721,13 +957,10 @@
     }
 
     if (state.variant === 'forbidden') {
-      const forbidden = GSAlgorithms.parseForbiddenText(els.forbiddenInput.value);
+      const maxForbidden = instance.men.length * instance.women.length;
+      const forbiddenCount = readForbiddenCount(maxForbidden);
+      const forbidden = GSAlgorithms.generateForbiddenPairs(instance, forbiddenCount, Date.now());
       instance = GSAlgorithms.applyForbiddenPairs(instance, forbidden);
-    }
-
-    if (state.variant === 'capacity') {
-      const caps = GSAlgorithms.parseCapacityText(els.capacityInput.value);
-      instance = GSAlgorithms.applyReceiverCapacities(instance, state.proposerSide, caps);
     }
 
     return instance;
@@ -748,8 +981,13 @@
     state.traits = traits;
   }
 
+  function createEngine(instance, proposerSide = state.proposerSide) {
+    const options = state.variant === 'capacity' ? { capacitySide: 'proposer' } : {};
+    return new GSAlgorithms.GSEngine(instance, proposerSide, options);
+  }
+
   function initializeEngine() {
-    state.engine = new GSAlgorithms.GSEngine(state.instance, state.proposerSide);
+    state.engine = createEngine(state.instance, state.proposerSide);
     state.logEntries = [t('step_initial')];
     state.exhaustedProposers = new Set();
     state.recentlySingle = new Set();
@@ -809,6 +1047,10 @@
   function mapEventToCodeLine(event) {
     if (!event) {
       return 1;
+    }
+
+    if (Number.isFinite(event.line) && event.line >= 1) {
+      return event.line;
     }
 
     if (event.type === 'initial') return 1;
@@ -872,7 +1114,8 @@
     state.recentlySingle = new Set();
 
     for (const proposer of snapshot.orientation.proposers) {
-      if (snapshot.proposerMatch[proposer] == null && snapshot.nextIndex[proposer] >= (snapshot.orientation.pPrefs[proposer] || []).length) {
+      const matches = Array.isArray(snapshot.proposerMatch[proposer]) ? snapshot.proposerMatch[proposer] : [];
+      if (matches.length === 0 && snapshot.nextIndex[proposer] >= (snapshot.orientation.pPrefs[proposer] || []).length) {
         state.exhaustedProposers.add(proposer);
       }
     }
@@ -953,12 +1196,61 @@
     els.runFullBtn.disabled = done;
   }
 
-  function renderCode() {
-    const lines = [];
-    for (let i = 1; i <= CODE_LINE_COUNT; i += 1) {
-      lines.push(t(`code_${i}`));
+  function buildCodeLines() {
+    if (state.variant === 'capacity') {
+      return [
+        '1  from collections import deque',
+        '2  r_rank = {r: {p: i for i, p in enumerate(pref)} for r, pref in r_prefs.items()}',
+        '3  free_p = deque(p_prefs.keys())',
+        '4  next_idx = {p: 0 for p in p_prefs}',
+        '5  engaged_to = {p: [] for p in p_prefs}',
+        '6  held_by = {r: [] for r in r_prefs}',
+        '7  while free_p:',
+        '8      p = free_p.popleft()',
+        '9      if len(engaged_to[p]) >= p_cap[p] or next_idx[p] >= len(p_prefs[p]): continue',
+        '10     r = p_prefs[p][next_idx[p]]',
+        '11     next_idx[p] += 1',
+        '12     if not held_by[r]:',
+        '13         held_by[r] = [p]; engaged_to[p].append(r); free_p.append(p)',
+        '14     else:',
+        '15         p_prime = held_by[r][0]',
+        '16         if r_rank[r][p_prime] < r_rank[r][p]: free_p.append(p)',
+        '17         else: held_by[r] = [p]; engaged_to[p].append(r); engaged_to[p_prime].remove(r); free_p.extend([p, p_prime])',
+        '18 return {(p, r) for p, lst in engaged_to.items() for r in lst}'
+      ];
     }
 
+    const line3 = state.variant === 'forbidden'
+      ? `3  free_p = deque(p_prefs.keys())  # ${t('code_comment_prefs_exclude_f')}`
+      : '3  free_p = deque(p_prefs.keys())';
+    const exhaustedComment = state.variant === 'forbidden'
+      ? t('code_comment_exhausted_allowed')
+      : t('code_comment_exhausted_all');
+
+    return [
+      '1  from collections import deque',
+      '2  r_rank = {r: {p: i for i, p in enumerate(pref)} for r, pref in r_prefs.items()}',
+      line3,
+      '4  next_idx = {p: 0 for p in p_prefs}',
+      `5  engaged_to = {}  # ${t('code_comment_engaged_one')}`,
+      '6  while free_p:',
+      '7      p = free_p.popleft()',
+      `8      if next_idx[p] >= len(p_prefs[p]): continue  # ${exhaustedComment}`,
+      '9      r = p_prefs[p][next_idx[p]]',
+      '10     next_idx[p] += 1',
+      '11     if r not in engaged_to:',
+      '12         engaged_to[r] = p',
+      '13     else:',
+      '14         p_prime = engaged_to[r]',
+      '15         if r_rank[r][p_prime] < r_rank[r][p]: free_p.append(p)',
+      '16         else:',
+      '17             engaged_to[r] = p; free_p.append(p_prime)',
+      '18 return {(p, r) for r, p in engaged_to.items()}'
+    ];
+  }
+
+  function renderCode() {
+    const lines = buildCodeLines();
     const activeLine = state.engine ? mapEventToCodeLine(state.engine.getSnapshot().lastEvent) : -1;
 
     els.codeDisplay.innerHTML = lines
@@ -978,8 +1270,11 @@
 
     const snapshot = state.engine.getSnapshot();
     const side = snapshot.orientation.side;
-    const freeName = side === 'men' ? 'free_men' : 'free_women';
-    const nextName = side === 'men' ? 'next_idx_men' : 'next_idx_women';
+    const proposerLabel = side === 'men' ? state.groupNames.men : state.groupNames.women;
+    const receiverLabel = side === 'men' ? state.groupNames.women : state.groupNames.men;
+    const freeName = 'free_p';
+    const nextName = 'next_idx';
+    const rankName = 'r_rank';
     const currentReceiver = snapshot.lastEvent && snapshot.lastEvent.receiver
       ? snapshot.lastEvent.receiver
       : null;
@@ -999,22 +1294,22 @@
       return safe.length > prefItemLimit ? `${body}, ...` : body;
     };
 
-    const mPrefRows = state.instance.men
+    const pPrefRows = snapshot.orientation.proposers
       .slice(0, prefRowLimit)
-      .map((man) => `
+      .map((proposer) => `
         <tr>
-          <td>${escapeHtml(man)}</td>
-          <td class="ds-prefs-cell">${escapeHtml(previewPrefList(state.instance.mPrefs[man]))}</td>
+          <td>${escapeHtml(proposer)}</td>
+          <td class="ds-prefs-cell">${escapeHtml(previewPrefList(snapshot.orientation.pPrefs[proposer]))}</td>
         </tr>
       `)
       .join('');
 
-    const wPrefRows = state.instance.women
+    const rPrefRows = snapshot.orientation.receivers
       .slice(0, prefRowLimit)
-      .map((woman) => `
+      .map((receiver) => `
         <tr>
-          <td>${escapeHtml(woman)}</td>
-          <td class="ds-prefs-cell">${escapeHtml(previewPrefList(state.instance.wPrefs[woman]))}</td>
+          <td>${escapeHtml(receiver)}</td>
+          <td class="ds-prefs-cell">${escapeHtml(previewPrefList(snapshot.orientation.rPrefs[receiver]))}</td>
         </tr>
       `)
       .join('');
@@ -1024,7 +1319,7 @@
       ...snapshot.orientation.receivers
     ].filter(Boolean))).slice(0, rankRowLimit);
 
-    const wRankRows = receiverOrder
+    const rRankRows = receiverOrder
       .map((receiver) => {
         const ranked = (snapshot.orientation.rPrefs[receiver] || [])
           .slice(0, 8)
@@ -1057,11 +1352,16 @@
       `)
       .join('');
 
-    const engagedRows = snapshot.orientation.receivers.slice(0, mapRowLimit)
-      .map((receiver) => `
+    const engagedEntities = state.variant === 'capacity'
+      ? snapshot.orientation.proposers
+      : snapshot.orientation.receivers;
+    const engagedHeader = state.variant === 'capacity' ? t('ds_proposer') : t('ds_receiver');
+
+    const engagedRows = engagedEntities.slice(0, mapRowLimit)
+      .map((entity) => `
         <tr>
-          <td>${escapeHtml(receiver)}</td>
-          <td>${escapeHtml((snapshot.engagedTo[receiver] || []).join(', ') || '-')}</td>
+          <td>${escapeHtml(entity)}</td>
+          <td>${escapeHtml((snapshot.engagedTo[entity] || []).join(', ') || '-')}</td>
         </tr>
       `)
       .join('');
@@ -1071,29 +1371,54 @@
       .map((name) => `<span class="ds-badge warn">${escapeHtml(name)}</span>`)
       .join('');
 
+    const forbiddenBadges = state.variant === 'forbidden'
+      ? Array.from(state.instance.forbidden)
+        .slice(0, exhaustedRowLimit)
+        .map((key) => {
+          const parts = String(key).split('|');
+          if (parts.length !== 2) {
+            return '';
+          }
+          return `<span class="ds-badge warn">${escapeHtml(`${parts[0]}-${parts[1]}`)}</span>`;
+        })
+        .join('')
+      : '';
+
+    const capRows = state.variant === 'capacity'
+      ? snapshot.orientation.proposers
+        .slice(0, mapRowLimit)
+        .map((proposer) => `
+          <tr>
+            <td>${escapeHtml(proposer)}</td>
+            <td>${escapeHtml(String(snapshot.orientation.proposerCaps[proposer] || 0))}</td>
+          </tr>
+        `)
+        .join('')
+      : '';
+
     els.dsDisplay.innerHTML = `
       <div class="ds-grid">
         <section class="ds-card">
-          <h4>m_prefs</h4>
+          <h4>p_prefs</h4>
           <table class="ds-mini-table">
-            <thead><tr><th>${escapeHtml(t('side_men'))}</th><th>${escapeHtml(t('table_prefs'))}</th></tr></thead>
-            <tbody>${mPrefRows || `<tr><td colspan="2">-</td></tr>`}</tbody>
+            <thead><tr><th>${escapeHtml(proposerLabel)}</th><th>${escapeHtml(t('table_prefs'))}</th></tr></thead>
+            <tbody>${pPrefRows || `<tr><td colspan="2">-</td></tr>`}</tbody>
           </table>
         </section>
 
         <section class="ds-card">
-          <h4>w_prefs</h4>
+          <h4>r_prefs</h4>
           <table class="ds-mini-table">
-            <thead><tr><th>${escapeHtml(t('side_women'))}</th><th>${escapeHtml(t('table_prefs'))}</th></tr></thead>
-            <tbody>${wPrefRows || `<tr><td colspan="2">-</td></tr>`}</tbody>
+            <thead><tr><th>${escapeHtml(receiverLabel)}</th><th>${escapeHtml(t('table_prefs'))}</th></tr></thead>
+            <tbody>${rPrefRows || `<tr><td colspan="2">-</td></tr>`}</tbody>
           </table>
         </section>
 
         <section class="ds-card ds-card-wide">
-          <h4>w_rank</h4>
+          <h4>${escapeHtml(rankName)}</h4>
           <table class="ds-mini-table">
             <thead><tr><th>${escapeHtml(t('ds_receiver'))}</th><th>${escapeHtml(t('ds_top_rank'))}</th></tr></thead>
-            <tbody>${wRankRows || `<tr><td colspan="2">-</td></tr>`}</tbody>
+            <tbody>${rRankRows || `<tr><td colspan="2">-</td></tr>`}</tbody>
           </table>
         </section>
 
@@ -1113,10 +1438,27 @@
         <section class="ds-card">
           <h4>engaged_to</h4>
           <table class="ds-mini-table">
-            <thead><tr><th>${escapeHtml(t('ds_receiver'))}</th><th>${escapeHtml(t('table_partner'))}</th></tr></thead>
+            <thead><tr><th>${escapeHtml(engagedHeader)}</th><th>${escapeHtml(t('table_partner'))}</th></tr></thead>
             <tbody>${engagedRows}</tbody>
           </table>
         </section>
+
+        ${state.variant === 'capacity'
+          ? `<section class="ds-card">
+              <h4>p_cap (${escapeHtml(t('ds_caps'))})</h4>
+              <table class="ds-mini-table">
+                <thead><tr><th>${escapeHtml(t('ds_proposer'))}</th><th>cap</th></tr></thead>
+                <tbody>${capRows || `<tr><td colspan="2">-</td></tr>`}</tbody>
+              </table>
+            </section>`
+          : ''}
+
+        ${state.variant === 'forbidden'
+          ? `<section class="ds-card ds-card-wide">
+              <h4>F (${escapeHtml(t('ds_forbidden'))})</h4>
+              <div class="ds-badges">${forbiddenBadges || `<span class="ds-empty">${escapeHtml(t('partner_none'))}</span>`}</div>
+            </section>`
+          : ''}
 
         <section class="ds-card ds-card-wide">
           <h4>${escapeHtml(t('ds_exhausted'))}</h4>
@@ -1172,13 +1514,9 @@
         const partners = new Set(partnersMap[name] || []);
         const rowClass = name === activeRowName ? 'active-row' : '';
         const rowCategory = personCategory(side, name);
-        const becameSingle = state.recentlySingle.has(name) && partners.size === 0;
-        let marker = '';
-        if (becameSingle) {
-          marker = `<span class="name-marker single" aria-label="${escapeHtml(t('status_became_single'))}">∅</span>`;
-        } else if (partners.size > 0) {
-          marker = `<span class="name-marker engaged" aria-label="${escapeHtml(t('legend_engaged'))}">O</span>`;
-        }
+        const displaced = state.recentlySingle.has(name);
+        const becameSingle = displaced && ((state.variant === 'capacity' && side === 'men') || partners.size === 0);
+        const marker = tableStatusMarkerHtml(side, name, partners.size, becameSingle);
 
         const prefCells = [];
         for (let i = 0; i < maxCols; i += 1) {
@@ -1189,6 +1527,12 @@
             prefCells.push(`<td class="${classes.join(' ')}">-</td>`);
             continue;
           }
+
+          const forbiddenCell = isForbiddenCandidate(side, name, candidate);
+          if (forbiddenCell) {
+            classes.push('forbidden');
+          }
+
           if (partners.has(candidate)) {
             classes.push('engaged');
             const candidateSide = side === 'men' ? 'women' : 'men';
@@ -1213,7 +1557,7 @@
 
         return `
           <tr class="${rowClass}">
-            <td class="${nameCellClasses.join(' ')}">${escapeHtml(name)} ${marker}</td>
+            <td class="${nameCellClasses.join(' ')}">${escapeHtml(name)}${marker ? ` ${marker}` : ''}</td>
             ${prefCells.join('')}
           </tr>
         `;
@@ -1285,7 +1629,7 @@
     return out;
   }
 
-  function avatarSvg(name, coord, side, isEngaged, isRecentlySingle, isExhausted, rankText, showName) {
+  function avatarSvg(name, coord, side, partnerCount, isRecentlySingle, isExhausted, rankText, showName) {
     const trait = state.traits[name] || { body: 0, hat: 0, glasses: false, colorOffset: 0 };
     const baseHue = side === 'men' ? 200 : 330;
     const hue = (baseHue + trait.colorOffset) % 360;
@@ -1313,12 +1657,7 @@
          <line x1="${x - 2}" y1="${y - 13}" x2="${x + 2}" y2="${y - 13}" stroke="#1f2937" stroke-width="1"></line>`
       : '';
 
-    let statusMarker = '';
-    if (isRecentlySingle) {
-      statusMarker = `<text class="graph-status-marker graph-status-single" x="${x}" y="${y - 35}" text-anchor="middle">∅</text>`;
-    } else if (isEngaged) {
-      statusMarker = `<text class="graph-status-marker graph-status-engaged" x="${x}" y="${y - 35}" text-anchor="middle">O</text>`;
-    }
+    const statusMarker = graphStatusMarkerSvg(side, name, x, y - 35, partnerCount, isRecentlySingle, 10);
 
     return `
       ${statusMarker}
@@ -1331,6 +1670,43 @@
       ${hat}
       ${showName ? `<text class="graph-node-label" x="${x + (side === 'men' ? -18 : 18)}" y="${y + 28}" text-anchor="${side === 'men' ? 'end' : 'start'}">${escapeHtml(name)}</text>` : ''}
       <text class="graph-rank-label" x="${x + (side === 'men' ? -30 : 30)}" y="${y - 24}" text-anchor="${side === 'men' ? 'end' : 'start'}">${escapeHtml(t('legend_rank'))}:${escapeHtml(rankText)}</text>
+      ${isExhausted ? `<text class="graph-rank-label" x="${x}" y="${y + 38}" text-anchor="middle" fill="var(--danger)">${escapeHtml(t('graph_exhausted'))}</text>` : ''}
+    `;
+  }
+
+  function hospitalSvg(name, coord, partnerCount, isRecentlySingle, isExhausted, rankText, showName, compact = false) {
+    const x = coord.x;
+    const y = coord.y;
+    const strokeColor = isExhausted ? '#7a3f3f' : 'rgba(0,0,0,0.27)';
+    const bodyColor = isExhausted ? '#a76464' : '#4d88c0';
+    const roofColor = isExhausted ? '#8e4e4e' : '#355f89';
+    const windowColor = isExhausted ? '#efc9c9' : '#e2f1ff';
+    const doorColor = isExhausted ? '#7a4040' : '#2f4d6b';
+    const statusY = compact ? (y - 13) : (y - 35);
+    const statusMarker = graphStatusMarkerSvg('men', name, x, statusY, partnerCount, isRecentlySingle, compact ? 8 : 10);
+
+    if (compact) {
+      return `
+        ${statusMarker}
+        <polygon points="${x - 9},${y - 2} ${x},${y - 10} ${x + 9},${y - 2}" fill="${roofColor}" stroke="${strokeColor}" stroke-width="1"></polygon>
+        <rect x="${x - 8}" y="${y - 2}" width="16" height="11" rx="1.8" fill="${bodyColor}" stroke="${strokeColor}" stroke-width="1"></rect>
+        <rect x="${x - 2}" y="${y + 2}" width="4" height="7" rx="1" fill="${doorColor}"></rect>
+        ${showName ? `<text class="graph-node-label" x="${x - 12}" y="${y + 4}" text-anchor="end">${escapeHtml(name)}</text>` : ''}
+        <text class="graph-rank-label" x="${x - 24}" y="${y - 8}" text-anchor="end">${escapeHtml(t('legend_rank'))}:${escapeHtml(rankText)}</text>
+      `;
+    }
+
+    return `
+      ${statusMarker}
+      <polygon points="${x - 14},${y - 3} ${x},${y - 16} ${x + 14},${y - 3}" fill="${roofColor}" stroke="${strokeColor}" stroke-width="1"></polygon>
+      <rect x="${x - 12}" y="${y - 3}" width="24" height="26" rx="3" fill="${bodyColor}" stroke="${strokeColor}" stroke-width="1"></rect>
+      <rect x="${x - 8.4}" y="${y + 2}" width="4.2" height="4.2" rx="0.8" fill="${windowColor}" opacity="0.95"></rect>
+      <rect x="${x + 4.2}" y="${y + 2}" width="4.2" height="4.2" rx="0.8" fill="${windowColor}" opacity="0.95"></rect>
+      <rect x="${x - 8.4}" y="${y + 8.2}" width="4.2" height="4.2" rx="0.8" fill="${windowColor}" opacity="0.95"></rect>
+      <rect x="${x + 4.2}" y="${y + 8.2}" width="4.2" height="4.2" rx="0.8" fill="${windowColor}" opacity="0.95"></rect>
+      <rect x="${x - 2.4}" y="${y + 10}" width="4.8" height="13" rx="1.2" fill="${doorColor}"></rect>
+      ${showName ? `<text class="graph-node-label" x="${x - 18}" y="${y + 28}" text-anchor="end">${escapeHtml(name)}</text>` : ''}
+      <text class="graph-rank-label" x="${x - 30}" y="${y - 24}" text-anchor="end">${escapeHtml(t('legend_rank'))}:${escapeHtml(rankText)}</text>
       ${isExhausted ? `<text class="graph-rank-label" x="${x}" y="${y + 38}" text-anchor="middle" fill="var(--danger)">${escapeHtml(t('graph_exhausted'))}</text>` : ''}
     `;
   }
@@ -1375,6 +1751,22 @@
         </marker>
       </defs>
     `;
+
+    const forbiddenEdges = [];
+    if (state.variant === 'forbidden' && state.instance.forbidden.size > 0) {
+      for (const key of state.instance.forbidden) {
+        const parts = String(key).split('|');
+        if (parts.length !== 2) {
+          continue;
+        }
+        const from = menCoords[parts[0]];
+        const to = womenCoords[parts[1]];
+        if (!from || !to) {
+          continue;
+        }
+        forbiddenEdges.push(`<line class="graph-forbidden-edge" x1="${from.x}" y1="${from.y}" x2="${to.x}" y2="${to.y}"></line>`);
+      }
+    }
 
     const edgeLines = [];
     for (const proposer of orientation.proposers) {
@@ -1421,21 +1813,27 @@
         const partners = menPartners[man] || [];
         const rank = rankValue(state.instance.mPrefs[man] || [], partners);
         const exhausted = state.proposerSide === 'men' && state.exhaustedProposers.has(man);
-        const recentlySingle = state.recentlySingle.has(man) && partners.length === 0;
+        const displaced = state.recentlySingle.has(man);
+        const recentlySingle = displaced && (state.variant === 'capacity' || partners.length === 0);
+        const isResidentHospital = state.variant === 'capacity';
 
         if (!avatars) {
+          if (isResidentHospital) {
+            return hospitalSvg(man, coord, partners.length, recentlySingle, exhausted, rank, showNames, true);
+          }
           const clothesColor = graphClothesColor('men', man, exhausted);
           return `
-            ${recentlySingle
-              ? `<text class="graph-status-marker graph-status-single" x="${coord.x}" y="${coord.y - 12}" text-anchor="middle">∅</text>`
-              : (partners.length ? `<text class="graph-status-marker graph-status-engaged" x="${coord.x}" y="${coord.y - 12}" text-anchor="middle">O</text>` : '')}
+            ${graphStatusMarkerSvg('men', man, coord.x, coord.y - 12, partners.length, recentlySingle, 8)}
             <circle cx="${coord.x}" cy="${coord.y}" r="6" fill="${clothesColor}" stroke="rgba(0,0,0,0.24)" stroke-width="1"></circle>
             ${showNames ? `<text class="graph-node-label" x="${coord.x - 12}" y="${coord.y + 4}" text-anchor="end">${escapeHtml(man)}</text>` : ''}
             <text class="graph-rank-label" x="${coord.x - 24}" y="${coord.y - 8}" text-anchor="end">${escapeHtml(t('legend_rank'))}:${escapeHtml(rank)}</text>
           `;
         }
 
-        return avatarSvg(man, coord, 'men', partners.length > 0, recentlySingle, exhausted, rank, showNames);
+        if (isResidentHospital) {
+          return hospitalSvg(man, coord, partners.length, recentlySingle, exhausted, rank, showNames);
+        }
+        return avatarSvg(man, coord, 'men', partners.length, recentlySingle, exhausted, rank, showNames);
       })
       .join('');
 
@@ -1451,16 +1849,14 @@
         if (!avatars) {
           const clothesColor = graphClothesColor('women', woman, exhausted);
           return `
-            ${recentlySingle
-              ? `<text class="graph-status-marker graph-status-single" x="${coord.x}" y="${coord.y - 12}" text-anchor="middle">∅</text>`
-              : (partners.length ? `<text class="graph-status-marker graph-status-engaged" x="${coord.x}" y="${coord.y - 12}" text-anchor="middle">O</text>` : '')}
+            ${graphStatusMarkerSvg('women', woman, coord.x, coord.y - 12, partners.length, recentlySingle, 8)}
             <circle cx="${coord.x}" cy="${coord.y}" r="6" fill="${clothesColor}" stroke="rgba(0,0,0,0.24)" stroke-width="1"></circle>
             ${showNames ? `<text class="graph-node-label" x="${coord.x + 12}" y="${coord.y + 4}" text-anchor="start">${escapeHtml(woman)}</text>` : ''}
             <text class="graph-rank-label" x="${coord.x + 24}" y="${coord.y - 8}" text-anchor="start">${escapeHtml(t('legend_rank'))}:${escapeHtml(rank)}</text>
           `;
         }
 
-        return avatarSvg(woman, coord, 'women', partners.length > 0, recentlySingle, exhausted, rank, showNames);
+        return avatarSvg(woman, coord, 'women', partners.length, recentlySingle, exhausted, rank, showNames);
       })
       .join('');
 
@@ -1469,7 +1865,7 @@
       <text class="graph-side-title" x="${width - 88}" y="34" text-anchor="end">${escapeHtml(state.groupNames.women)}</text>
     `;
 
-    els.matchGraph.innerHTML = `${defs}${edgeLines.join('')}${engagedEdges}${activeEdge}${sideTitles}${menNodes}${womenNodes}`;
+    els.matchGraph.innerHTML = `${defs}${forbiddenEdges.join('')}${edgeLines.join('')}${engagedEdges}${activeEdge}${sideTitles}${menNodes}${womenNodes}`;
   }
 
   function renderInsights() {
@@ -1805,15 +2201,22 @@
     const womenData = parseEditorRows(els.womenEditorTable, 'women', { includeCap, includeCategory });
 
     try {
-      const forbidden = includeForbidden
-        ? GSAlgorithms.parseForbiddenText(els.forbiddenInput.value)
-        : new Set();
-      const instance = GSAlgorithms.normalizeInstance({
+      const baseInstance = GSAlgorithms.normalizeInstance({
         name: 'custom',
         ...menData,
         ...womenData,
-        forbidden
+        forbidden: new Set()
       });
+      const instance = includeForbidden
+        ? GSAlgorithms.applyForbiddenPairs(
+          baseInstance,
+          GSAlgorithms.generateForbiddenPairs(
+            baseInstance,
+            readForbiddenCount(baseInstance.men.length * baseInstance.women.length),
+            Date.now()
+          )
+        )
+        : baseInstance;
       loadInstance(instance, 'status_table_applied');
     } catch (error) {
       setStatus('status_invalid');
@@ -1884,9 +2287,9 @@
       const easyInst = GSAlgorithms.presets.easy(n);
       const worstInst = GSAlgorithms.presets.worstCase(n);
 
-      const eInverse = new GSAlgorithms.GSEngine(inverseInst, state.proposerSide);
-      const eEasy = new GSAlgorithms.GSEngine(easyInst, state.proposerSide);
-      const eWorst = new GSAlgorithms.GSEngine(worstInst, state.proposerSide);
+      const eInverse = createEngine(inverseInst, state.proposerSide);
+      const eEasy = createEngine(easyInst, state.proposerSide);
+      const eWorst = createEngine(worstInst, state.proposerSide);
 
       eInverse.runToEnd();
       eEasy.runToEnd();
@@ -1901,7 +2304,7 @@
 
         const randomInst = GSAlgorithms.presets.random(n, seed);
 
-        const eRandom = new GSAlgorithms.GSEngine(randomInst, state.proposerSide);
+        const eRandom = createEngine(randomInst, state.proposerSide);
 
         eRandom.runToEnd();
 
@@ -2086,8 +2489,15 @@
 
     els.variantSelect.addEventListener('change', () => {
       state.variant = els.variantSelect.value;
+      if (state.variant === 'capacity') {
+        els.proposerSelect.value = 'men';
+        state.proposerSide = 'men';
+      }
+      syncDefaultGroupInputs();
       updateVariantFieldsVisibility();
       updateScenarioPresetNotes();
+      updateDynamicLabels();
+      renderAll();
     });
 
     els.presetSelect.addEventListener('change', () => {
@@ -2095,6 +2505,29 @@
       updateVariantFieldsVisibility();
       updateScenarioPresetNotes();
     });
+
+    els.pairsInput.addEventListener('input', () => {
+      const parsed = Number.parseInt(String(els.pairsInput.value || ''), 10);
+      const n = Number.isFinite(parsed) ? clamp(parsed, 2, 2000) : 2;
+      syncForbiddenCountBounds(n * n);
+    });
+
+    const residentInputs = [
+      els.residentCountInput,
+      els.positionsCountInput,
+      els.hospitalCountInput,
+      els.hospitalPosMinInput,
+      els.hospitalPosMaxInput,
+      els.residentAppsMinInput,
+      els.residentAppsMaxInput
+    ];
+    for (const input of residentInputs) {
+      input.addEventListener('input', () => {
+        if (state.variant === 'capacity') {
+          syncResidentMatchingBounds();
+        }
+      });
+    }
 
     els.proposerSelect.addEventListener('change', () => {
       state.proposerSide = els.proposerSelect.value === 'women' ? 'women' : 'men';

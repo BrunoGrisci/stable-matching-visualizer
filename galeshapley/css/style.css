@@ -276,6 +276,28 @@ body.controls-collapsed #mainSplitter {
   display: none;
 }
 
+.range-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.45rem;
+  margin-top: 0.3rem;
+}
+
+label.range-item {
+  display: grid;
+  gap: 0.2rem;
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: 0.74rem;
+  color: var(--muted);
+}
+
+.range-mini-label {
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
 select,
 input,
 textarea,
@@ -579,6 +601,24 @@ body.code-collapsed #codeColumn {
   color: var(--danger);
 }
 
+.name-marker.open {
+  color: color-mix(in srgb, var(--muted) 78%, #505861);
+}
+
+.name-slot-markers {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.08rem;
+  margin-left: 0.3rem;
+  vertical-align: middle;
+}
+
+.name-slot-markers .name-marker {
+  margin-left: 0;
+  font-size: 1.04rem;
+  min-width: 0.72ch;
+}
+
 .graph-status-marker {
   font-family: var(--font-title);
   font-size: 20px;
@@ -591,6 +631,10 @@ body.code-collapsed #codeColumn {
 
 .graph-status-single {
   fill: var(--danger);
+}
+
+.graph-status-open {
+  fill: color-mix(in srgb, var(--muted) 82%, #505861);
 }
 
 .pref-table .partner-cell {
@@ -608,6 +652,14 @@ body.code-collapsed #codeColumn {
   white-space: nowrap;
   font-weight: 600;
   background: color-mix(in srgb, var(--panel) 92%, #fff);
+}
+
+.pref-table td.pref-cell.forbidden {
+  color: color-mix(in srgb, var(--danger) 86%, #5a1414) !important;
+  text-decoration-line: line-through;
+  text-decoration-color: color-mix(in srgb, var(--danger) 78%, #5a1414) !important;
+  text-decoration-thickness: 2px;
+  text-decoration-skip-ink: none;
 }
 
 .pref-table td.pref-cell.engaged {
@@ -668,6 +720,14 @@ body.code-collapsed #codeColumn {
   width: 100%;
   height: 100%;
   display: block;
+}
+
+.graph-forbidden-edge {
+  stroke: color-mix(in srgb, var(--danger) 72%, #7f1d1d);
+  stroke-width: 1.6;
+  stroke-opacity: 0.78;
+  stroke-dasharray: 6 4;
+  stroke-linecap: round;
 }
 
 .code-column {

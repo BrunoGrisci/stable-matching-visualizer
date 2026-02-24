@@ -31,10 +31,10 @@
       <div class="field-grid two">
         <label for="variantSelect" data-i18n="variant_label">Scenario</label>
         <select id="variantSelect">
-          <option value="classic" data-i18n="variant_classic">Classic Stable Matching</option>
+          <option value="classic" data-i18n="variant_classic">Stable Marriage</option>
           <option value="good_bad" data-i18n="variant_good_bad">Good and Bad Categories</option>
           <option value="forbidden" data-i18n="variant_forbidden">Forbidden Pairs</option>
-          <option value="capacity" data-i18n="variant_capacity">Hospital Capacities</option>
+          <option value="capacity" data-i18n="variant_capacity">Resident Matching</option>
         </select>
         <p id="scenarioNote" class="field-note"></p>
 
@@ -67,13 +67,51 @@
             </div>
 
             <div id="forbiddenField" class="field-slot">
-              <label for="forbiddenInput" data-i18n="forbidden_label">Forbidden pairs (man-woman, comma separated)</label>
-              <textarea id="forbiddenInput" rows="2" placeholder="M1-W2, M3-W1"></textarea>
+              <label for="forbiddenCountInput" data-i18n="forbidden_label">Forbidden pairs count (0 to n^2)</label>
+              <input id="forbiddenCountInput" type="number" min="0" max="2000" step="1" value="1" inputmode="numeric">
             </div>
 
-            <div id="capacityField" class="field-slot">
-              <label for="capacityInput" data-i18n="capacity_label">Capacities (receiver:cap, comma separated)</label>
-              <textarea id="capacityInput" rows="2" placeholder="Atlanta:2, Boston:1"></textarea>
+            <div id="residentCountField" class="field-slot">
+              <label for="residentCountInput" data-i18n="resident_count_label">Number of residents</label>
+              <input id="residentCountInput" type="number" min="1" max="2000" step="1" value="10" inputmode="numeric">
+            </div>
+
+            <div id="positionsCountField" class="field-slot">
+              <label for="positionsCountInput" data-i18n="positions_count_label">Total number of positions</label>
+              <input id="positionsCountInput" type="number" min="1" max="1000000" step="1" value="12" inputmode="numeric">
+            </div>
+
+            <div id="hospitalCountField" class="field-slot">
+              <label for="hospitalCountInput" data-i18n="hospital_count_label">Number of hospitals</label>
+              <input id="hospitalCountInput" type="number" min="1" max="2000" step="1" value="6" inputmode="numeric">
+            </div>
+
+            <div id="hospitalPosRangeField" class="field-slot">
+              <label data-i18n="hospital_pos_range_label">Hospital positions range</label>
+              <div class="range-row">
+                <label class="range-item" for="hospitalPosMinInput">
+                  <span class="range-mini-label" data-i18n="range_min">Min</span>
+                  <input id="hospitalPosMinInput" type="number" min="1" max="2000" step="1" value="1" inputmode="numeric">
+                </label>
+                <label class="range-item" for="hospitalPosMaxInput">
+                  <span class="range-mini-label" data-i18n="range_max">Max</span>
+                  <input id="hospitalPosMaxInput" type="number" min="1" max="2000" step="1" value="3" inputmode="numeric">
+                </label>
+              </div>
+            </div>
+
+            <div id="residentAppsRangeField" class="field-slot">
+              <label data-i18n="resident_apps_range_label">Resident applications range</label>
+              <div class="range-row">
+                <label class="range-item" for="residentAppsMinInput">
+                  <span class="range-mini-label" data-i18n="range_min">Min</span>
+                  <input id="residentAppsMinInput" type="number" min="1" max="2000" step="1" value="1" inputmode="numeric">
+                </label>
+                <label class="range-item" for="residentAppsMaxInput">
+                  <span class="range-mini-label" data-i18n="range_max">Max</span>
+                  <input id="residentAppsMaxInput" type="number" min="1" max="2000" step="1" value="3" inputmode="numeric">
+                </label>
+              </div>
             </div>
           </div>
         </details>

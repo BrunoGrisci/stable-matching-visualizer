@@ -128,6 +128,7 @@
 
   function normalizeInstance(raw) {
     const input = raw || {};
+    const allowIncompletePrefs = Boolean(input.allowIncompletePrefs);
     const menFromPrefs = input.mPrefs ? Object.keys(input.mPrefs) : [];
     const womenFromPrefs = input.wPrefs ? Object.keys(input.wPrefs) : [];
 
@@ -153,21 +154,17 @@
         if (!womenSet.has(woman)) {
           continue;
         }
-        if (forbidden.has(makePairKey(man, woman))) {
-          continue;
-        }
         if (!seen.has(woman)) {
           seen.add(woman);
           filtered.push(woman);
         }
       }
-      for (const woman of women) {
-        if (forbidden.has(makePairKey(man, woman))) {
-          continue;
-        }
-        if (!seen.has(woman)) {
-          seen.add(woman);
-          filtered.push(woman);
+      if (!allowIncompletePrefs) {
+        for (const woman of women) {
+          if (!seen.has(woman)) {
+            seen.add(woman);
+            filtered.push(woman);
+          }
         }
       }
       mPrefs[man] = filtered;
@@ -181,21 +178,17 @@
         if (!menSet.has(man)) {
           continue;
         }
-        if (forbidden.has(makePairKey(man, woman))) {
-          continue;
-        }
         if (!seen.has(man)) {
           seen.add(man);
           filtered.push(man);
         }
       }
-      for (const man of men) {
-        if (forbidden.has(makePairKey(man, woman))) {
-          continue;
-        }
-        if (!seen.has(man)) {
-          seen.add(man);
-          filtered.push(man);
+      if (!allowIncompletePrefs) {
+        for (const man of men) {
+          if (!seen.has(man)) {
+            seen.add(man);
+            filtered.push(man);
+          }
         }
       }
       wPrefs[woman] = filtered;
@@ -235,7 +228,8 @@
       wCap,
       menCategory,
       womenCategory,
-      forbidden
+      forbidden,
+      allowIncompletePrefs
     };
   }
 
@@ -250,7 +244,8 @@
       wCap: { ...instance.wCap },
       menCategory: { ...instance.menCategory },
       womenCategory: { ...instance.womenCategory },
-      forbidden: new Set(instance.forbidden)
+      forbidden: new Set(instance.forbidden),
+      allowIncompletePrefs: Boolean(instance.allowIncompletePrefs)
     });
   }
 
@@ -283,7 +278,8 @@
 
     const pPrefsSource = side === 'men' ? instance.mPrefs : instance.wPrefs;
     const rPrefsSource = side === 'men' ? instance.wPrefs : instance.mPrefs;
-    const capsSource = side === 'men' ? instance.wCap : instance.mCap;
+    const proposerCapsSource = side === 'men' ? instance.mCap : instance.wCap;
+    const receiverCapsSource = side === 'men' ? instance.wCap : instance.mCap;
 
     const pPrefs = {};
     const pRank = {};
@@ -345,9 +341,15 @@
       rRank[receiver] = rankMap;
     }
 
+    const proposerCaps = {};
+    for (const proposer of proposers) {
+      const capRaw = proposerCapsSource[proposer] != null ? proposerCapsSource[proposer] : 1;
+      proposerCaps[proposer] = clamp(toInt(capRaw, 1), 1, 1000000);
+    }
+
     const receiverCaps = {};
     for (const receiver of receivers) {
-      const capRaw = capsSource[receiver] != null ? capsSource[receiver] : 1;
+      const capRaw = receiverCapsSource[receiver] != null ? receiverCapsSource[receiver] : 1;
       receiverCaps[receiver] = clamp(toInt(capRaw, 1), 1, 1000000);
     }
 
@@ -359,6 +361,7 @@
       pRank,
       rPrefs,
       rRank,
+      proposerCaps,
       receiverCaps,
       totalPossibleProposals
     };
@@ -389,9 +392,10 @@
   }
 
   class GSEngine {
-    constructor(instance, proposerSide) {
+    constructor(instance, proposerSide, options = {}) {
       this.instance = cloneInstance(instance);
       this.orientation = buildOrientation(this.instance, proposerSide);
+      this.capacitySide = options.capacitySide === 'proposer' ? 'proposer' : 'receiver';
 
       this.queue = this.orientation.proposers.slice();
       this.head = 0;
@@ -402,7 +406,7 @@
 
       for (const proposer of this.orientation.proposers) {
         this.nextIndex[proposer] = 0;
-        this.proposerMatch[proposer] = null;
+        this.proposerMatch[proposer] = [];
       }
       for (const receiver of this.orientation.receivers) {
         this.receiverMatches[receiver] = [];
@@ -418,9 +422,48 @@
       };
     }
 
+    getProposerCapacity(proposer) {
+      if (this.capacitySide !== 'proposer') {
+        return 1;
+      }
+      const cap = this.orientation.proposerCaps[proposer];
+      return Number.isFinite(cap) ? cap : 1;
+    }
+
+    getReceiverCapacity(receiver) {
+      if (this.capacitySide !== 'receiver') {
+        return 1;
+      }
+      const cap = this.orientation.receiverCaps[receiver];
+      return Number.isFinite(cap) ? cap : 1;
+    }
+
+    hasFreeSlot(proposer) {
+      const current = this.proposerMatch[proposer] || [];
+      return current.length < this.getProposerCapacity(proposer);
+    }
+
     hasRemainingChoice(proposer) {
       const prefs = this.orientation.pPrefs[proposer] || [];
       return this.nextIndex[proposer] < prefs.length;
+    }
+
+    canPropose(proposer) {
+      return this.hasFreeSlot(proposer) && this.hasRemainingChoice(proposer);
+    }
+
+    enqueueIfCanPropose(proposer) {
+      if (this.canPropose(proposer)) {
+        this.queue.push(proposer);
+      }
+    }
+
+    removeMatchFromProposer(proposer, receiver) {
+      const list = this.proposerMatch[proposer] || [];
+      const idx = list.indexOf(receiver);
+      if (idx >= 0) {
+        list.splice(idx, 1);
+      }
     }
 
     step() {
@@ -432,12 +475,16 @@
         const proposer = this.queue[this.head];
         this.head += 1;
 
+        if (!this.hasFreeSlot(proposer)) {
+          continue;
+        }
+
         const prefs = this.orientation.pPrefs[proposer] || [];
         if (this.nextIndex[proposer] >= prefs.length) {
           this.stepCount += 1;
           this.lastEvent = {
             type: 'exhausted',
-            line: 4,
+            line: this.capacitySide === 'proposer' ? 9 : 8,
             key: 'step_exhausted',
             proposer,
             proposalCount: this.proposalCount
@@ -450,16 +497,17 @@
         this.proposalCount += 1;
 
         const current = this.receiverMatches[receiver];
-        const cap = this.orientation.receiverCaps[receiver];
+        const cap = this.getReceiverCapacity(receiver);
 
         if (current.length < cap) {
           current.push(proposer);
-          this.proposerMatch[proposer] = receiver;
+          this.proposerMatch[proposer].push(receiver);
+          this.enqueueIfCanPropose(proposer);
 
           this.stepCount += 1;
           this.lastEvent = {
             type: 'accept_free',
-            line: 5,
+            line: this.capacitySide === 'proposer' ? 13 : 12,
             key: 'step_accept_free',
             proposer,
             receiver,
@@ -484,17 +532,16 @@
             current.push(proposer);
           }
 
-          this.proposerMatch[proposer] = receiver;
-          this.proposerMatch[worstCurrent] = null;
+          this.proposerMatch[proposer].push(receiver);
+          this.removeMatchFromProposer(worstCurrent, receiver);
 
-          if (this.hasRemainingChoice(worstCurrent)) {
-            this.queue.push(worstCurrent);
-          }
+          this.enqueueIfCanPropose(proposer);
+          this.enqueueIfCanPropose(worstCurrent);
 
           this.stepCount += 1;
           this.lastEvent = {
             type: 'replace',
-            line: 6,
+            line: 17,
             key: 'step_replace',
             proposer,
             receiver,
@@ -504,14 +551,12 @@
           return this.lastEvent;
         }
 
-        if (this.hasRemainingChoice(proposer)) {
-          this.queue.push(proposer);
-        }
+        this.enqueueIfCanPropose(proposer);
 
         this.stepCount += 1;
         this.lastEvent = {
           type: 'reject',
-          line: 7,
+          line: this.capacitySide === 'proposer' ? 16 : 15,
           key: 'step_reject',
           proposer,
           receiver,
@@ -525,7 +570,7 @@
       this.stepCount += 1;
       this.lastEvent = {
         type: 'finished',
-        line: 8,
+        line: 18,
         key: 'step_finished',
         proposalCount: this.proposalCount
       };
@@ -547,11 +592,10 @@
     getPairsCanonical() {
       const out = [];
       for (const proposer of this.orientation.proposers) {
-        const receiver = this.proposerMatch[proposer];
-        if (!receiver) {
-          continue;
+        const receivers = this.proposerMatch[proposer] || [];
+        for (const receiver of receivers) {
+          out.push(pairFromOrientation(this.orientation.side, proposer, receiver));
         }
-        out.push(pairFromOrientation(this.orientation.side, proposer, receiver));
       }
 
       out.sort((a, b) => {
@@ -568,22 +612,22 @@
       const queueRemaining = this.queue.slice(this.head);
       const freeProposers = [];
       for (const proposer of this.orientation.proposers) {
-        if (this.proposerMatch[proposer] == null && this.hasRemainingChoice(proposer)) {
+        if (this.canPropose(proposer)) {
           freeProposers.push(proposer);
         }
       }
 
-      const engagedTo = {};
-      for (const receiver of this.orientation.receivers) {
-        engagedTo[receiver] = this.receiverMatches[receiver].slice();
-      }
+      const engagedTo = this.capacitySide === 'proposer'
+        ? Object.fromEntries(this.orientation.proposers.map((p) => [p, this.proposerMatch[p].slice()]))
+        : Object.fromEntries(this.orientation.receivers.map((r) => [r, this.receiverMatches[r].slice()]));
 
       return {
         done: this.done,
         proposalCount: this.proposalCount,
         stepCount: this.stepCount,
         lastEvent: this.lastEvent,
-        proposerMatch: { ...this.proposerMatch },
+        capacitySide: this.capacitySide,
+        proposerMatch: Object.fromEntries(this.orientation.proposers.map((p) => [p, this.proposerMatch[p].slice()])),
         receiverMatches: Object.fromEntries(this.orientation.receivers.map((r) => [r, this.receiverMatches[r].slice()])),
         pairs: this.getPairsCanonical(),
         totalPossibleProposals: this.orientation.totalPossibleProposals,
@@ -596,18 +640,23 @@
     }
   }
 
-  function countInstabilities(orientation, proposerMatch, receiverMatches) {
+  function countInstabilities(orientation, proposerMatch, receiverMatches, capacitySide = 'receiver') {
     let count = 0;
 
     for (const proposer of orientation.proposers) {
-      const currentReceiver = proposerMatch[proposer];
-      const currentRank = currentReceiver && Object.prototype.hasOwnProperty.call(orientation.pRank[proposer], currentReceiver)
-        ? orientation.pRank[proposer][currentReceiver]
+      const currentReceivers = Array.isArray(proposerMatch[proposer]) ? proposerMatch[proposer] : [];
+      const currentSet = new Set(currentReceivers);
+      const proposerCap = capacitySide === 'proposer'
+        ? (orientation.proposerCaps[proposer] || 1)
+        : 1;
+      const worstCurrent = getWorstCurrent(proposer, currentReceivers, orientation.pRank);
+      const worstCurrentRank = worstCurrent && Object.prototype.hasOwnProperty.call(orientation.pRank[proposer], worstCurrent)
+        ? orientation.pRank[proposer][worstCurrent]
         : Number.POSITIVE_INFINITY;
 
       const prefs = orientation.pPrefs[proposer] || [];
       for (const receiver of prefs) {
-        if (receiver === currentReceiver) {
+        if (currentSet.has(receiver)) {
           continue;
         }
 
@@ -615,12 +664,15 @@
           ? orientation.pRank[proposer][receiver]
           : Number.POSITIVE_INFINITY;
 
-        if (receiverRankForProposer > currentRank) {
+        const proposerWants = currentReceivers.length < proposerCap || receiverRankForProposer < worstCurrentRank;
+        if (!proposerWants) {
           continue;
         }
 
         const currentList = receiverMatches[receiver] || [];
-        const cap = orientation.receiverCaps[receiver] || 0;
+        const cap = capacitySide === 'receiver'
+          ? (orientation.receiverCaps[receiver] || 1)
+          : 1;
 
         if (currentList.length < cap) {
           count += 1;
@@ -665,7 +717,8 @@
 
   function evaluateOptimality(instance, orientation) {
     const sameSize = orientation.proposers.length === orientation.receivers.length;
-    const allCapOne = orientation.receivers.every((receiver) => (orientation.receiverCaps[receiver] || 0) === 1);
+    const allCapOne = orientation.proposers.every((proposer) => (orientation.proposerCaps[proposer] || 0) === 1)
+      && orientation.receivers.every((receiver) => (orientation.receiverCaps[receiver] || 0) === 1);
     const forbiddenExists = instance.forbidden.size > 0;
 
     if (!sameSize || !allCapOne || forbiddenExists) {
@@ -718,7 +771,12 @@
 
   function analyzeSnapshot(instance, proposerSide, snapshot) {
     const orientation = snapshot.orientation;
-    const instabilityCount = countInstabilities(orientation, snapshot.proposerMatch, snapshot.receiverMatches);
+    const instabilityCount = countInstabilities(
+      orientation,
+      snapshot.proposerMatch,
+      snapshot.receiverMatches,
+      snapshot.capacitySide || 'receiver'
+    );
     const perfect = evaluatePerfect(instance, snapshot.pairs);
     const optimality = snapshot.done
       ? evaluateOptimality(instance, orientation)
@@ -992,6 +1050,188 @@
     return adapted;
   }
 
+  function rotateList(list, offset) {
+    const size = list.length;
+    if (!size) {
+      return [];
+    }
+    const shift = ((toInt(offset, 0) % size) + size) % size;
+    if (shift === 0) {
+      return list.slice();
+    }
+    return [...list.slice(shift), ...list.slice(0, shift)];
+  }
+
+  function distributeCapacities(count, total, minCap, maxCap, random, rng) {
+    const safeCount = Math.max(1, toInt(count, 1));
+    const safeMin = Math.max(1, toInt(minCap, 1));
+    const safeMax = Math.max(safeMin, toInt(maxCap, safeMin));
+    const minTotal = safeCount * safeMin;
+    const maxTotal = safeCount * safeMax;
+    const safeTotal = clamp(toInt(total, minTotal), minTotal, maxTotal);
+    const caps = Array(safeCount).fill(safeMin);
+    let remaining = safeTotal - minTotal;
+
+    if (remaining <= 0) {
+      return caps;
+    }
+
+    const randomFn = typeof rng === 'function' ? rng : Math.random;
+    if (random) {
+      while (remaining > 0) {
+        const available = [];
+        for (let i = 0; i < safeCount; i += 1) {
+          if (caps[i] < safeMax) {
+            available.push(i);
+          }
+        }
+        if (!available.length) {
+          break;
+        }
+        const idx = available[Math.floor(randomFn() * available.length)];
+        caps[idx] += 1;
+        remaining -= 1;
+      }
+      return caps;
+    }
+
+    let cursor = 0;
+    while (remaining > 0) {
+      const idx = cursor % safeCount;
+      if (caps[idx] < safeMax) {
+        caps[idx] += 1;
+        remaining -= 1;
+      }
+      cursor += 1;
+    }
+
+    return caps;
+  }
+
+  function createResidentMatchingInstance(config = {}) {
+    const key = trimString(config.preset || 'random') || 'random';
+    const residentsCount = clamp(toInt(config.residents, 10), 1, 2000);
+    const hospitalsCount = clamp(toInt(config.hospitals, 6), 1, 2000);
+
+    const hospitalCapMin = clamp(toInt(config.hospitalCapMin, 1), 1, 1000000);
+    const hospitalCapMax = clamp(toInt(config.hospitalCapMax, Math.max(1, hospitalCapMin)), hospitalCapMin, 1000000);
+    const minPositions = hospitalsCount * hospitalCapMin;
+    const maxPositions = hospitalsCount * hospitalCapMax;
+    const positions = clamp(toInt(config.positions, minPositions), minPositions, maxPositions);
+
+    const residentAppsMin = clamp(toInt(config.residentAppsMin, 1), 1, hospitalsCount);
+    const residentAppsMax = clamp(
+      toInt(config.residentAppsMax, Math.min(3, hospitalsCount)),
+      residentAppsMin,
+      hospitalsCount
+    );
+
+    const rng = createRng(config.seed);
+    const hospitals = sequentialNames('H', hospitalsCount);
+    const residents = sequentialNames('R', residentsCount);
+    const mPrefsBase = {};
+    const wPrefsBase = {};
+
+    if (key === 'inverse') {
+      const reverseHospitals = hospitals.slice().reverse();
+      for (const hospital of hospitals) {
+        mPrefsBase[hospital] = residents.slice();
+      }
+      for (const resident of residents) {
+        wPrefsBase[resident] = reverseHospitals.slice();
+      }
+    } else if (key === 'easy') {
+      for (let i = 0; i < hospitals.length; i += 1) {
+        const hospital = hospitals[i];
+        const topResident = residents[i % residents.length];
+        mPrefsBase[hospital] = [topResident, ...residents.filter((r) => r !== topResident)];
+      }
+      for (let j = 0; j < residents.length; j += 1) {
+        const resident = residents[j];
+        const topHospital = hospitals[j % hospitals.length];
+        wPrefsBase[resident] = [topHospital, ...hospitals.filter((h) => h !== topHospital)];
+      }
+    } else if (key === 'worst_case_demo') {
+      for (let i = 0; i < hospitals.length; i += 1) {
+        const hospital = hospitals[i];
+        mPrefsBase[hospital] = rotateList(residents, i);
+      }
+      for (let j = 0; j < residents.length; j += 1) {
+        const resident = residents[j];
+        const shifted = rotateList(hospitals, j + 1);
+        wPrefsBase[resident] = shifted;
+      }
+    } else {
+      for (const hospital of hospitals) {
+        mPrefsBase[hospital] = shuffled(residents, rng);
+      }
+      for (const resident of residents) {
+        wPrefsBase[resident] = shuffled(hospitals, rng);
+      }
+    }
+
+    const capacities = distributeCapacities(
+      hospitalsCount,
+      positions,
+      hospitalCapMin,
+      hospitalCapMax,
+      key === 'random',
+      rng
+    );
+
+    const mCap = {};
+    const wCap = {};
+    for (let i = 0; i < hospitals.length; i += 1) {
+      mCap[hospitals[i]] = capacities[i];
+    }
+    for (const resident of residents) {
+      wCap[resident] = 1;
+    }
+
+    const forbidden = new Set();
+    const wPrefs = {};
+    const mPrefs = {};
+
+    for (let idx = 0; idx < residents.length; idx += 1) {
+      const resident = residents[idx];
+      const order = (wPrefsBase[resident] || hospitals).slice();
+      const span = residentAppsMax - residentAppsMin + 1;
+      const appCount = key === 'random'
+        ? residentAppsMin + Math.floor(rng() * span)
+        : residentAppsMin + (idx % span);
+      const boundedCount = clamp(appCount, residentAppsMin, residentAppsMax);
+      const allowed = new Set(order.slice(0, boundedCount));
+      wPrefs[resident] = order.filter((hospital) => allowed.has(hospital));
+
+      if (allowed.size === hospitals.length) {
+        continue;
+      }
+
+      for (const hospital of hospitals) {
+        if (!allowed.has(hospital)) {
+          forbidden.add(makePairKey(hospital, resident));
+        }
+      }
+    }
+
+    for (const hospital of hospitals) {
+      const orderedResidents = (mPrefsBase[hospital] || residents).slice();
+      mPrefs[hospital] = orderedResidents.filter((resident) => !forbidden.has(makePairKey(hospital, resident)));
+    }
+
+    return normalizeInstance({
+      name: `resident_${key}`,
+      men: hospitals,
+      women: residents,
+      mPrefs,
+      wPrefs,
+      mCap,
+      wCap,
+      forbidden,
+      allowIncompletePrefs: true
+    });
+  }
+
   function applyForbiddenPairs(instance, forbiddenSet) {
     const copy = cloneInstance(instance);
     for (const key of forbiddenSet) {
@@ -1000,10 +1240,66 @@
     return normalizeInstance(copy);
   }
 
+  function generateForbiddenPairs(instance, count, seed) {
+    const men = (instance && instance.men) ? instance.men.slice() : [];
+    const women = (instance && instance.women) ? instance.women.slice() : [];
+    if (!men.length || !women.length) {
+      return new Set();
+    }
+
+    const maxPairs = men.length * women.length;
+    const target = clamp(toInt(count, 0), 0, maxPairs);
+    const out = new Set();
+
+    if (target === 0) {
+      return out;
+    }
+
+    const random = createRng(seed);
+    const maxAttempts = Math.max(target * 48, 128);
+    let attempts = 0;
+
+    while (out.size < target && attempts < maxAttempts) {
+      const man = men[Math.floor(random() * men.length)];
+      const woman = women[Math.floor(random() * women.length)];
+      out.add(makePairKey(man, woman));
+      attempts += 1;
+    }
+
+    if (out.size < target) {
+      for (const man of men) {
+        for (const woman of women) {
+          out.add(makePairKey(man, woman));
+          if (out.size >= target) {
+            break;
+          }
+        }
+        if (out.size >= target) {
+          break;
+        }
+      }
+    }
+
+    return out;
+  }
+
   function applyReceiverCapacities(instance, proposerSide, capsByName) {
     const copy = cloneInstance(instance);
     const side = proposerSide === 'women' ? 'women' : 'men';
     const targetCaps = side === 'men' ? copy.wCap : copy.mCap;
+    for (const [name, cap] of Object.entries(capsByName || {})) {
+      if (!Object.prototype.hasOwnProperty.call(targetCaps, name)) {
+        continue;
+      }
+      targetCaps[name] = clamp(toInt(cap, 1), 1, 1000000);
+    }
+    return normalizeInstance(copy);
+  }
+
+  function applyProposerCapacities(instance, proposerSide, capsByName) {
+    const copy = cloneInstance(instance);
+    const side = proposerSide === 'women' ? 'women' : 'men';
+    const targetCaps = side === 'men' ? copy.mCap : copy.wCap;
     for (const [name, cap] of Object.entries(capsByName || {})) {
       if (!Object.prototype.hasOwnProperty.call(targetCaps, name)) {
         continue;
@@ -1170,8 +1466,11 @@
     parseCsvInstance,
     exportCsvInstance,
     applyForbiddenPairs,
+    generateForbiddenPairs,
     applyReceiverCapacities,
+    applyProposerCapacities,
     applyGoodBadCategories,
+    createResidentMatchingInstance,
     buildOrientation,
     analyzeSnapshot,
     GSEngine,
@@ -1182,6 +1481,7 @@
       random: createRandomInstance,
       inverse: createInverseInstance,
       easy: createEasyInstance,
+      residentMatching: createResidentMatchingInstance,
       goodBad: createGoodBadInstance,
       goodBadFromPreset: createGoodBadPresetInstance,
       worstCase: createWorstCaseInstance
