@@ -700,39 +700,91 @@
     return count;
   }
 
-  function evaluatePerfect(instance, pairs) {
-    if (instance.men.length !== instance.women.length) {
-      return false;
+  function evaluatePerfect(snapshot) {
+    const orientation = snapshot.orientation;
+    const capacitySide = snapshot.capacitySide || 'receiver';
+
+    const getProposerCap = (proposer) => {
+      if (capacitySide !== 'proposer') {
+        return 1;
+      }
+      const cap = orientation.proposerCaps[proposer];
+      return Number.isFinite(cap) ? Math.max(0, cap) : 1;
+    };
+
+    const getReceiverCap = (receiver) => {
+      if (capacitySide !== 'receiver') {
+        return 1;
+      }
+      const cap = orientation.receiverCaps[receiver];
+      return Number.isFinite(cap) ? Math.max(0, cap) : 1;
+    };
+
+    let proposerCapSum = 0;
+    let receiverCapSum = 0;
+    let proposerMatchSum = 0;
+    let receiverMatchSum = 0;
+
+    for (const proposer of orientation.proposers) {
+      const cap = getProposerCap(proposer);
+      const matches = Array.isArray(snapshot.proposerMatch[proposer]) ? snapshot.proposerMatch[proposer].length : 0;
+      proposerCapSum += cap;
+      proposerMatchSum += matches;
+      if (matches !== cap) {
+        return false;
+      }
     }
 
-    const menSeen = new Set();
-    const womenSeen = new Set();
-    for (const pair of pairs) {
-      menSeen.add(pair.man);
-      womenSeen.add(pair.woman);
+    for (const receiver of orientation.receivers) {
+      const cap = getReceiverCap(receiver);
+      const matches = Array.isArray(snapshot.receiverMatches[receiver]) ? snapshot.receiverMatches[receiver].length : 0;
+      receiverCapSum += cap;
+      receiverMatchSum += matches;
+      if (matches !== cap) {
+        return false;
+      }
     }
 
-    return menSeen.size === instance.men.length && womenSeen.size === instance.women.length && pairs.length === instance.men.length;
+    const pairCount = Array.isArray(snapshot.pairs) ? snapshot.pairs.length : 0;
+    return proposerCapSum === receiverCapSum
+      && proposerMatchSum === receiverMatchSum
+      && proposerMatchSum === pairCount
+      && pairCount === proposerCapSum;
   }
 
-  function evaluateOptimality(instance, orientation) {
+  function evaluateOptimality(instance, orientation, capacitySide = 'receiver') {
+    const allProposerCapOne = orientation.proposers.every((proposer) => (orientation.proposerCaps[proposer] || 0) === 1);
+    const allReceiverCapOne = orientation.receivers.every((receiver) => (orientation.receiverCaps[receiver] || 0) === 1);
+    const allCapOne = allProposerCapOne && allReceiverCapOne;
     const sameSize = orientation.proposers.length === orientation.receivers.length;
-    const allCapOne = orientation.proposers.every((proposer) => (orientation.proposerCaps[proposer] || 0) === 1)
-      && orientation.receivers.every((receiver) => (orientation.receiverCaps[receiver] || 0) === 1);
     const forbiddenExists = instance.forbidden.size > 0;
 
-    if (!sameSize || !allCapOne || forbiddenExists) {
+    // Classic one-to-one (and Good/Bad) setting.
+    if (sameSize && allCapOne && !forbiddenExists) {
       return {
-        mode: 'not_applicable',
-        proposerOptimal: null,
-        receiverPessimal: null
+        mode: 'current',
+        proposerOptimal: true,
+        receiverPessimal: true,
+        context: 'one_to_one'
+      };
+    }
+
+    // Resident matching (many-to-one): capacities may sit on either side depending on proposer orientation.
+    if ((capacitySide === 'proposer' && allReceiverCapOne)
+      || (capacitySide === 'receiver' && allProposerCapOne)) {
+      return {
+        mode: 'current',
+        proposerOptimal: true,
+        receiverPessimal: true,
+        context: 'many_to_one'
       };
     }
 
     return {
-      mode: 'current',
-      proposerOptimal: true,
-      receiverPessimal: true
+      mode: 'not_applicable',
+      proposerOptimal: null,
+      receiverPessimal: null,
+      context: null
     };
   }
 
@@ -777,13 +829,14 @@
       snapshot.receiverMatches,
       snapshot.capacitySide || 'receiver'
     );
-    const perfect = evaluatePerfect(instance, snapshot.pairs);
+    const perfect = evaluatePerfect(snapshot);
     const optimality = snapshot.done
-      ? evaluateOptimality(instance, orientation)
+      ? evaluateOptimality(instance, orientation, snapshot.capacitySide || 'receiver')
       : {
         mode: 'pending',
         proposerOptimal: null,
-        receiverPessimal: null
+        receiverPessimal: null,
+        context: null
       };
     const goodBadProperty = snapshot.done
       ? evaluateGoodManGoodWomanProperty(instance, snapshot.pairs)

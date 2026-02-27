@@ -96,7 +96,7 @@
       ds_proposer: 'proposer',
       ds_top_rank: 'top rank map',
       ds_forbidden: 'forbidden pairs',
-      ds_caps: 'proposer capacities',
+      ds_caps: 'capacities',
       log_title: 'Step log',
 
       editor_men_title: 'Editable men table',
@@ -186,7 +186,8 @@
       insight_pending: 'Run until completion to evaluate.',
       insight_termination_value: '{used} / {bound} proposals',
       insight_optimal_current: 'Holds for the computed matching in this one-to-one setting.',
-      insight_optimal_not_applicable: 'Only evaluated in one-to-one settings without forbidden pairs.',
+      insight_optimal_current_many_to_one: 'Holds for the computed matching in this many-to-one setting.',
+      insight_optimal_not_applicable: 'Evaluated in one-to-one settings without forbidden pairs, and in resident matching.',
       insight_good_bad_current: 'Holds for the computed matching.',
       insight_good_bad_not_applicable: 'Categories missing or incomplete.',
 
@@ -330,7 +331,7 @@
       ds_proposer: 'proponente',
       ds_top_rank: 'mapa de ranking',
       ds_forbidden: 'pares proibidos',
-      ds_caps: 'capacidades dos proponentes',
+      ds_caps: 'capacidades',
       log_title: 'Log de passos',
 
       editor_men_title: 'Tabela editável de homens',
@@ -420,7 +421,8 @@
       insight_pending: 'Execute até o fim para avaliar.',
       insight_termination_value: '{used} / {bound} propostas',
       insight_optimal_current: 'Vale para o emparelhamento calculado neste cenário um-para-um.',
-      insight_optimal_not_applicable: 'Avaliado apenas em cenários um-para-um sem pares proibidos.',
+      insight_optimal_current_many_to_one: 'Vale para o emparelhamento calculado neste cenário muitos-para-um.',
+      insight_optimal_not_applicable: 'Avaliado em cenários um-para-um sem pares proibidos e no pareamento de residentes.',
       insight_good_bad_current: 'Vale para o emparelhamento calculado.',
       insight_good_bad_not_applicable: 'Categorias ausentes ou incompletas.',
 

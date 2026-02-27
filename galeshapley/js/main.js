@@ -771,6 +771,61 @@
       .join('');
   }
 
+  function graphLayoutMetrics(detailedMode) {
+    if (detailedMode) {
+      const nodeTop = 24;
+      const nodeBottom = 23;
+      const markerAscent = 16;
+      const markerDescent = 4;
+      const markerGapAboveNode = 2;
+      const interNodeGap = 2;
+      const topPadding = 2;
+      const bottomPadding = 28;
+      const markerHeight = markerAscent + markerDescent;
+      const markerTopExtent = nodeTop + markerGapAboveNode + markerHeight;
+      return {
+        nodeTop,
+        nodeBottom,
+        markerAscent,
+        markerDescent,
+        markerGapAboveNode,
+        interNodeGap,
+        topPadding,
+        bottomPadding,
+        markerHeight,
+        markerTopExtent,
+        // Baseline position for marker text so marker stays above its own node.
+        markerBaselineOffset: -(nodeTop + markerGapAboveNode + markerDescent),
+        requiredStep: nodeBottom + interNodeGap + markerTopExtent
+      };
+    }
+
+    const nodeTop = 6;
+    const nodeBottom = 6;
+    const markerAscent = 12;
+    const markerDescent = 3;
+    const markerGapAboveNode = 1;
+    const interNodeGap = 2;
+    const topPadding = 2;
+    const bottomPadding = 16;
+    const markerHeight = markerAscent + markerDescent;
+    const markerTopExtent = nodeTop + markerGapAboveNode + markerHeight;
+    return {
+      nodeTop,
+      nodeBottom,
+      markerAscent,
+      markerDescent,
+      markerGapAboveNode,
+      interNodeGap,
+      topPadding,
+      bottomPadding,
+      markerHeight,
+      markerTopExtent,
+      markerBaselineOffset: -(nodeTop + markerGapAboveNode + markerDescent),
+      requiredStep: nodeBottom + interNodeGap + markerTopExtent
+    };
+  }
+
   function createEditorRow(side, rowData = {}) {
     const row = document.createElement('tr');
 
@@ -982,7 +1037,11 @@
   }
 
   function createEngine(instance, proposerSide = state.proposerSide) {
-    const options = state.variant === 'capacity' ? { capacitySide: 'proposer' } : {};
+    let options = {};
+    if (state.variant === 'capacity') {
+      const capacitySide = proposerSide === 'women' ? 'receiver' : 'proposer';
+      options = { capacitySide };
+    }
     return new GSAlgorithms.GSEngine(instance, proposerSide, options);
   }
 
@@ -1198,6 +1257,29 @@
 
   function buildCodeLines() {
     if (state.variant === 'capacity') {
+      const capacityOnProposer = state.proposerSide !== 'women';
+      if (!capacityOnProposer) {
+        return [
+          '1  from collections import deque',
+          '2  r_rank = {r: {p: i for i, p in enumerate(pref)} for r, pref in r_prefs.items()}',
+          '3  free_p = deque(p_prefs.keys())',
+          '4  next_idx = {p: 0 for p in p_prefs}',
+          '5  engaged_to = {r: [] for r in r_prefs}',
+          '6  while free_p:',
+          '7      p = free_p.popleft()',
+          '8      if next_idx[p] >= len(p_prefs[p]): continue',
+          '9      r = p_prefs[p][next_idx[p]]',
+          '10     next_idx[p] += 1',
+          '11     if len(engaged_to[r]) < r_cap[r]:',
+          '12         engaged_to[r].append(p)',
+          '13     else:',
+          '14         p_prime = worst_current(r, engaged_to[r], r_rank)',
+          '15         if r_rank[r][p_prime] < r_rank[r][p]: free_p.append(p)',
+          '16         else:',
+          '17             engaged_to[r].remove(p_prime); engaged_to[r].append(p); free_p.append(p_prime)',
+          '18 return {(p, r) for r, lst in engaged_to.items() for p in lst}'
+        ];
+      }
       return [
         '1  from collections import deque',
         '2  r_rank = {r: {p: i for i, p in enumerate(pref)} for r, pref in r_prefs.items()}',
@@ -1352,10 +1434,13 @@
       `)
       .join('');
 
+    const capacityOnProposer = snapshot.capacitySide === 'proposer';
     const engagedEntities = state.variant === 'capacity'
-      ? snapshot.orientation.proposers
+      ? (capacityOnProposer ? snapshot.orientation.proposers : snapshot.orientation.receivers)
       : snapshot.orientation.receivers;
-    const engagedHeader = state.variant === 'capacity' ? t('ds_proposer') : t('ds_receiver');
+    const engagedHeader = state.variant === 'capacity'
+      ? (capacityOnProposer ? t('ds_proposer') : t('ds_receiver'))
+      : t('ds_receiver');
 
     const engagedRows = engagedEntities.slice(0, mapRowLimit)
       .map((entity) => `
@@ -1385,12 +1470,14 @@
       : '';
 
     const capRows = state.variant === 'capacity'
-      ? snapshot.orientation.proposers
+      ? (capacityOnProposer ? snapshot.orientation.proposers : snapshot.orientation.receivers)
         .slice(0, mapRowLimit)
-        .map((proposer) => `
+        .map((entity) => `
           <tr>
-            <td>${escapeHtml(proposer)}</td>
-            <td>${escapeHtml(String(snapshot.orientation.proposerCaps[proposer] || 0))}</td>
+            <td>${escapeHtml(entity)}</td>
+            <td>${escapeHtml(String(capacityOnProposer
+              ? (snapshot.orientation.proposerCaps[entity] || 0)
+              : (snapshot.orientation.receiverCaps[entity] || 0)))}</td>
           </tr>
         `)
         .join('')
@@ -1445,9 +1532,9 @@
 
         ${state.variant === 'capacity'
           ? `<section class="ds-card">
-              <h4>p_cap (${escapeHtml(t('ds_caps'))})</h4>
+              <h4>${capacityOnProposer ? 'p_cap' : 'r_cap'} (${escapeHtml(t('ds_caps'))})</h4>
               <table class="ds-mini-table">
-                <thead><tr><th>${escapeHtml(t('ds_proposer'))}</th><th>cap</th></tr></thead>
+                <thead><tr><th>${escapeHtml(capacityOnProposer ? t('ds_proposer') : t('ds_receiver'))}</th><th>cap</th></tr></thead>
                 <tbody>${capRows || `<tr><td colspan="2">-</td></tr>`}</tbody>
               </table>
             </section>`
@@ -1629,7 +1716,7 @@
     return out;
   }
 
-  function avatarSvg(name, coord, side, partnerCount, isRecentlySingle, isExhausted, rankText, showName) {
+  function avatarSvg(name, coord, side, partnerCount, isRecentlySingle, isExhausted, rankText, showName, markerOffset = -35) {
     const trait = state.traits[name] || { body: 0, hat: 0, glasses: false, colorOffset: 0 };
     const baseHue = side === 'men' ? 200 : 330;
     const hue = (baseHue + trait.colorOffset) % 360;
@@ -1657,10 +1744,9 @@
          <line x1="${x - 2}" y1="${y - 13}" x2="${x + 2}" y2="${y - 13}" stroke="#1f2937" stroke-width="1"></line>`
       : '';
 
-    const statusMarker = graphStatusMarkerSvg(side, name, x, y - 35, partnerCount, isRecentlySingle, 10);
+    const statusMarker = graphStatusMarkerSvg(side, name, x, y + markerOffset, partnerCount, isRecentlySingle, 10);
 
     return `
-      ${statusMarker}
       ${body}
       <circle cx="${x}" cy="${y - 14}" r="10" fill="${headColor}" stroke="${strokeColor}" stroke-width="1"></circle>
       <circle cx="${x - 3.2}" cy="${y - 15}" r="1.1" fill="#111827"></circle>
@@ -1668,36 +1754,43 @@
       <path d="M ${x - 3} ${y - 9} Q ${x} ${y - 7} ${x + 3} ${y - 9}" stroke="#7b4a3a" stroke-width="1" fill="none"></path>
       ${glasses}
       ${hat}
+      ${statusMarker}
       ${showName ? `<text class="graph-node-label" x="${x + (side === 'men' ? -18 : 18)}" y="${y + 28}" text-anchor="${side === 'men' ? 'end' : 'start'}">${escapeHtml(name)}</text>` : ''}
       <text class="graph-rank-label" x="${x + (side === 'men' ? -30 : 30)}" y="${y - 24}" text-anchor="${side === 'men' ? 'end' : 'start'}">${escapeHtml(t('legend_rank'))}:${escapeHtml(rankText)}</text>
       ${isExhausted ? `<text class="graph-rank-label" x="${x}" y="${y + 38}" text-anchor="middle" fill="var(--danger)">${escapeHtml(t('graph_exhausted'))}</text>` : ''}
     `;
   }
 
-  function hospitalSvg(name, coord, partnerCount, isRecentlySingle, isExhausted, rankText, showName, compact = false) {
+  function hospitalSvg(name, coord, partnerCount, isRecentlySingle, isExhausted, rankText, showName, compact = false, markerOffset = -35) {
+    const trait = state.traits[name] || { body: 0, hat: 0, glasses: false, colorOffset: 0 };
+    const hue = (190 + (trait.colorOffset * 2)) % 360;
+    const sat = 48 + (trait.body * 6);
+    const bodyLight = 48 + (trait.hat * 5);
+    const roofLight = Math.max(24, bodyLight - 16);
+    const doorLight = Math.max(18, bodyLight - 24);
+    const windowHue = (hue + 165) % 360;
+
     const x = coord.x;
     const y = coord.y;
     const strokeColor = isExhausted ? '#7a3f3f' : 'rgba(0,0,0,0.27)';
-    const bodyColor = isExhausted ? '#a76464' : '#4d88c0';
-    const roofColor = isExhausted ? '#8e4e4e' : '#355f89';
-    const windowColor = isExhausted ? '#efc9c9' : '#e2f1ff';
-    const doorColor = isExhausted ? '#7a4040' : '#2f4d6b';
-    const statusY = compact ? (y - 13) : (y - 35);
-    const statusMarker = graphStatusMarkerSvg('men', name, x, statusY, partnerCount, isRecentlySingle, compact ? 8 : 10);
+    const bodyColor = isExhausted ? '#a76464' : `hsl(${hue}deg ${sat}% ${bodyLight}%)`;
+    const roofColor = isExhausted ? '#8e4e4e' : `hsl(${hue}deg ${Math.max(36, sat - 8)}% ${roofLight}%)`;
+    const windowColor = isExhausted ? '#efc9c9' : `hsl(${windowHue}deg 88% 92%)`;
+    const doorColor = isExhausted ? '#7a4040' : `hsl(${hue}deg ${Math.max(24, sat - 16)}% ${doorLight}%)`;
+    const statusMarker = graphStatusMarkerSvg('men', name, x, y + markerOffset, partnerCount, isRecentlySingle, compact ? 8 : 10);
 
     if (compact) {
       return `
-        ${statusMarker}
         <polygon points="${x - 9},${y - 2} ${x},${y - 10} ${x + 9},${y - 2}" fill="${roofColor}" stroke="${strokeColor}" stroke-width="1"></polygon>
         <rect x="${x - 8}" y="${y - 2}" width="16" height="11" rx="1.8" fill="${bodyColor}" stroke="${strokeColor}" stroke-width="1"></rect>
         <rect x="${x - 2}" y="${y + 2}" width="4" height="7" rx="1" fill="${doorColor}"></rect>
+        ${statusMarker}
         ${showName ? `<text class="graph-node-label" x="${x - 12}" y="${y + 4}" text-anchor="end">${escapeHtml(name)}</text>` : ''}
         <text class="graph-rank-label" x="${x - 24}" y="${y - 8}" text-anchor="end">${escapeHtml(t('legend_rank'))}:${escapeHtml(rankText)}</text>
       `;
     }
 
     return `
-      ${statusMarker}
       <polygon points="${x - 14},${y - 3} ${x},${y - 16} ${x + 14},${y - 3}" fill="${roofColor}" stroke="${strokeColor}" stroke-width="1"></polygon>
       <rect x="${x - 12}" y="${y - 3}" width="24" height="26" rx="3" fill="${bodyColor}" stroke="${strokeColor}" stroke-width="1"></rect>
       <rect x="${x - 8.4}" y="${y + 2}" width="4.2" height="4.2" rx="0.8" fill="${windowColor}" opacity="0.95"></rect>
@@ -1705,6 +1798,7 @@
       <rect x="${x - 8.4}" y="${y + 8.2}" width="4.2" height="4.2" rx="0.8" fill="${windowColor}" opacity="0.95"></rect>
       <rect x="${x + 4.2}" y="${y + 8.2}" width="4.2" height="4.2" rx="0.8" fill="${windowColor}" opacity="0.95"></rect>
       <rect x="${x - 2.4}" y="${y + 10}" width="4.8" height="13" rx="1.2" fill="${doorColor}"></rect>
+      ${statusMarker}
       ${showName ? `<text class="graph-node-label" x="${x - 18}" y="${y + 28}" text-anchor="end">${escapeHtml(name)}</text>` : ''}
       <text class="graph-rank-label" x="${x - 30}" y="${y - 24}" text-anchor="end">${escapeHtml(t('legend_rank'))}:${escapeHtml(rankText)}</text>
       ${isExhausted ? `<text class="graph-rank-label" x="${x}" y="${y + 38}" text-anchor="middle" fill="var(--danger)">${escapeHtml(t('graph_exhausted'))}</text>` : ''}
@@ -1724,6 +1818,8 @@
     const men = state.instance.men;
     const women = state.instance.women;
     const totalNodes = men.length + women.length;
+    const showNames = totalNodes <= 140;
+    const avatars = totalNodes <= 260;
 
     const detailed = totalNodes <= 260;
     const maxRank = detailed
@@ -1733,10 +1829,29 @@
     els.graphModeTag.textContent = detailed ? t('graph_mode_full') : t('graph_mode_large');
 
     const width = 1200;
-    const height = 620;
-    const menCoords = getCoords(men, 170, 80, height - 90);
-    const womenCoords = getCoords(women, width - 170, 80, height - 90);
+    const baseHeight = 620;
+    const maxSideCount = Math.max(men.length, women.length);
+    const activeMetrics = graphLayoutMetrics(avatars);
+    const detailedMetrics = graphLayoutMetrics(true);
+    const compactMetrics = graphLayoutMetrics(false);
+
+    const requiredSpan = maxSideCount > 1
+      ? activeMetrics.requiredStep * (maxSideCount - 1)
+      : 0;
+    const topClear = activeMetrics.markerTopExtent + activeMetrics.topPadding;
+    const bottomClear = activeMetrics.nodeBottom + activeMetrics.bottomPadding;
+    const minHeight = topClear + requiredSpan + bottomClear;
+    const height = Math.max(baseHeight, Math.ceil(minHeight));
+    const yTop = topClear;
+    const yBottom = height - bottomClear;
+
+    const markerOffsetDetailed = detailedMetrics.markerBaselineOffset;
+    const markerOffsetCompact = compactMetrics.markerBaselineOffset;
+
+    const menCoords = getCoords(men, 170, yTop, yBottom);
+    const womenCoords = getCoords(women, width - 170, yTop, yBottom);
     const { menPartners, womenPartners } = buildPartnerMaps(snapshot.pairs);
+    els.matchGraph.setAttribute('viewBox', `0 0 ${width} ${height}`);
 
     const defs = `
       <defs>
@@ -1803,9 +1918,6 @@
       }
     }
 
-    const showNames = totalNodes <= 140;
-    const avatars = totalNodes <= 260;
-
     const menNodes = men
       .map((man) => {
         const coord = menCoords[man];
@@ -1819,11 +1931,11 @@
 
         if (!avatars) {
           if (isResidentHospital) {
-            return hospitalSvg(man, coord, partners.length, recentlySingle, exhausted, rank, showNames, true);
+            return hospitalSvg(man, coord, partners.length, recentlySingle, exhausted, rank, showNames, true, markerOffsetCompact);
           }
           const clothesColor = graphClothesColor('men', man, exhausted);
           return `
-            ${graphStatusMarkerSvg('men', man, coord.x, coord.y - 12, partners.length, recentlySingle, 8)}
+            ${graphStatusMarkerSvg('men', man, coord.x, coord.y + markerOffsetCompact, partners.length, recentlySingle, 8)}
             <circle cx="${coord.x}" cy="${coord.y}" r="6" fill="${clothesColor}" stroke="rgba(0,0,0,0.24)" stroke-width="1"></circle>
             ${showNames ? `<text class="graph-node-label" x="${coord.x - 12}" y="${coord.y + 4}" text-anchor="end">${escapeHtml(man)}</text>` : ''}
             <text class="graph-rank-label" x="${coord.x - 24}" y="${coord.y - 8}" text-anchor="end">${escapeHtml(t('legend_rank'))}:${escapeHtml(rank)}</text>
@@ -1831,9 +1943,9 @@
         }
 
         if (isResidentHospital) {
-          return hospitalSvg(man, coord, partners.length, recentlySingle, exhausted, rank, showNames);
+          return hospitalSvg(man, coord, partners.length, recentlySingle, exhausted, rank, showNames, false, markerOffsetDetailed);
         }
-        return avatarSvg(man, coord, 'men', partners.length, recentlySingle, exhausted, rank, showNames);
+        return avatarSvg(man, coord, 'men', partners.length, recentlySingle, exhausted, rank, showNames, markerOffsetDetailed);
       })
       .join('');
 
@@ -1849,20 +1961,21 @@
         if (!avatars) {
           const clothesColor = graphClothesColor('women', woman, exhausted);
           return `
-            ${graphStatusMarkerSvg('women', woman, coord.x, coord.y - 12, partners.length, recentlySingle, 8)}
+            ${graphStatusMarkerSvg('women', woman, coord.x, coord.y + markerOffsetCompact, partners.length, recentlySingle, 8)}
             <circle cx="${coord.x}" cy="${coord.y}" r="6" fill="${clothesColor}" stroke="rgba(0,0,0,0.24)" stroke-width="1"></circle>
             ${showNames ? `<text class="graph-node-label" x="${coord.x + 12}" y="${coord.y + 4}" text-anchor="start">${escapeHtml(woman)}</text>` : ''}
             <text class="graph-rank-label" x="${coord.x + 24}" y="${coord.y - 8}" text-anchor="start">${escapeHtml(t('legend_rank'))}:${escapeHtml(rank)}</text>
           `;
         }
 
-        return avatarSvg(woman, coord, 'women', partners.length, recentlySingle, exhausted, rank, showNames);
+        return avatarSvg(woman, coord, 'women', partners.length, recentlySingle, exhausted, rank, showNames, markerOffsetDetailed);
       })
       .join('');
 
+    const titleY = Math.max(24, Math.min(34, yTop - 14));
     const sideTitles = `
-      <text class="graph-side-title" x="88" y="34" text-anchor="start">${escapeHtml(state.groupNames.men)}</text>
-      <text class="graph-side-title" x="${width - 88}" y="34" text-anchor="end">${escapeHtml(state.groupNames.women)}</text>
+      <text class="graph-side-title" x="88" y="${titleY}" text-anchor="start">${escapeHtml(state.groupNames.men)}</text>
+      <text class="graph-side-title" x="${width - 88}" y="${titleY}" text-anchor="end">${escapeHtml(state.groupNames.women)}</text>
     `;
 
     els.matchGraph.innerHTML = `${defs}${forbiddenEdges.join('')}${edgeLines.join('')}${engagedEdges}${activeEdge}${sideTitles}${menNodes}${womenNodes}`;
@@ -1910,8 +2023,11 @@
 
     if (insight.optimality.mode === 'current') {
       const ok = Boolean(insight.optimality.proposerOptimal) && Boolean(insight.optimality.receiverPessimal);
+      const optimalKey = insight.optimality.context === 'many_to_one'
+        ? 'insight_optimal_current_many_to_one'
+        : 'insight_optimal_current';
       optimalText = ok
-        ? `${t('insight_true')} - ${t('insight_optimal_current')}`
+        ? `${t('insight_true')} - ${t(optimalKey)}`
         : t('insight_false');
       optimalClass = ok ? 'good' : 'bad';
     }
