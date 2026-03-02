@@ -21,6 +21,8 @@
     exhaustedProposers: new Set(),
     recentlySingle: new Set(),
     traits: {},
+    prefTablesStacked: false,
+    optimalityJobToken: 0,
     controlsCollapsed: false,
     codeCollapsed: false,
     curves: {
@@ -133,6 +135,8 @@
 
     menPrefTitle: document.getElementById('menPrefTitle'),
     womenPrefTitle: document.getElementById('womenPrefTitle'),
+    prefPair: document.getElementById('prefPair'),
+    prefLayoutToggleBtn: document.getElementById('prefLayoutToggleBtn'),
     menPrefTable: document.getElementById('menPrefTable'),
     womenPrefTable: document.getElementById('womenPrefTable'),
     graphModeTag: document.getElementById('graphModeTag'),
@@ -196,6 +200,11 @@
 
   function clamp(value, min, max) {
     return Math.min(max, Math.max(min, value));
+  }
+
+  function formatCount(value) {
+    const safe = Number.isFinite(value) ? Math.max(0, Math.floor(value)) : 0;
+    return safe.toLocaleString(state.lang === 'pt' ? 'pt-BR' : 'en-US');
   }
 
   function hashString(value) {
@@ -355,6 +364,7 @@
     updateToggleButtons();
     updateScenarioPresetNotes();
     updateDynamicLabels();
+    updatePrefLayoutToggle();
     renderAll();
   }
 
@@ -380,6 +390,81 @@
 
     els.proposerMenOption.textContent = t('proposer_generic', { group: state.groupNames.men });
     els.proposerWomenOption.textContent = t('proposer_generic', { group: state.groupNames.women });
+  }
+
+  function updatePrefLayoutToggle() {
+    if (!els.prefPair || !els.prefLayoutToggleBtn) {
+      return;
+    }
+
+    els.prefPair.classList.toggle('stacked', state.prefTablesStacked);
+    const labelKey = state.prefTablesStacked
+      ? 'pref_layout_side_by_side_btn'
+      : 'pref_layout_stack_btn';
+    const label = t(labelKey);
+    els.prefLayoutToggleBtn.textContent = label;
+    els.prefLayoutToggleBtn.title = label;
+    els.prefLayoutToggleBtn.setAttribute('aria-label', label);
+  }
+
+  function cancelOptimalityJob() {
+    state.optimalityJobToken += 1;
+  }
+
+  function applyEmpiricalOptimalityStatus(status) {
+    if (!state.insightsCache || !state.insightsCache.optimality) {
+      return;
+    }
+    const optimality = state.insightsCache.optimality;
+    optimality.empirical = status;
+
+    if (status && status.mode === 'checked') {
+      if (status.proposerOptimal === false) {
+        optimality.proposerOptimal = false;
+      }
+      if (status.receiverPessimal === false) {
+        optimality.receiverPessimal = false;
+      }
+    }
+  }
+
+  function startOptimalityEmpiricalComputation(snapshot) {
+    if (!snapshot || !snapshot.done || !state.insightsCache || !state.insightsCache.optimality) {
+      return;
+    }
+    const optimality = state.insightsCache.optimality;
+    if (optimality.mode !== 'current') {
+      return;
+    }
+
+    const empirical = optimality.empirical || {};
+    if (empirical.mode === 'checked' || empirical.mode === 'skipped') {
+      return;
+    }
+
+    cancelOptimalityJob();
+    const jobToken = state.optimalityJobToken;
+    const enumerator = GSAlgorithms.createEmpiricalOptimalityEnumerator(state.instance, snapshot);
+
+    const initialStatus = enumerator.getStatus();
+    applyEmpiricalOptimalityStatus(initialStatus);
+    renderInsights();
+
+    const stepLoop = () => {
+      if (jobToken !== state.optimalityJobToken) {
+        return;
+      }
+
+      const status = enumerator.step(2200);
+      applyEmpiricalOptimalityStatus(status);
+      renderInsights();
+
+      if (status.mode === 'running') {
+        requestAnimationFrame(stepLoop);
+      }
+    };
+
+    requestAnimationFrame(stepLoop);
   }
 
   function updateToggleButtons() {
@@ -514,16 +599,46 @@
       capacity: 'scenario_note_capacity'
     };
 
-    const presetKeyMap = {
+    const presetScenarioKeyMap = {
+      classic: {
+        hpl_spl: 'preset_note_classic_hpl',
+        worst_case_demo: 'preset_note_classic_worst_case',
+        random: 'preset_note_classic_random',
+        inverse: 'preset_note_classic_inverse',
+        easy: 'preset_note_classic_easy'
+      },
+      good_bad: {
+        worst_case_demo: 'preset_note_good_bad_worst_case',
+        random: 'preset_note_good_bad_random',
+        inverse: 'preset_note_good_bad_inverse',
+        easy: 'preset_note_good_bad_easy'
+      },
+      forbidden: {
+        worst_case_demo: 'preset_note_forbidden_worst_case',
+        random: 'preset_note_forbidden_random',
+        inverse: 'preset_note_forbidden_inverse',
+        easy: 'preset_note_forbidden_easy'
+      },
+      capacity: {
+        worst_case_demo: 'preset_note_capacity_worst_case',
+        random: 'preset_note_capacity_random',
+        inverse: 'preset_note_capacity_inverse',
+        easy: 'preset_note_capacity_easy'
+      }
+    };
+    const fallbackPresetKeyMap = {
       hpl_spl: 'preset_note_hpl',
       worst_case_demo: 'preset_note_worst_case',
       random: 'preset_note_random',
       inverse: 'preset_note_inverse',
       easy: 'preset_note_easy'
     };
+    const presetKey = (presetScenarioKeyMap[state.variant] && presetScenarioKeyMap[state.variant][state.preset])
+      || fallbackPresetKeyMap[state.preset]
+      || 'preset_note_random';
 
     els.scenarioNote.textContent = t(scenarioKeyMap[state.variant] || 'scenario_note_classic');
-    els.presetNote.textContent = t(presetKeyMap[state.preset] || 'preset_note_random');
+    els.presetNote.textContent = t(presetKey);
   }
 
   function updatePresetAvailability() {
@@ -550,7 +665,8 @@
 
     const usesN = variant !== 'capacity'
       && (variant === 'good_bad' || preset === 'random' || preset === 'inverse' || preset === 'easy' || preset === 'worst_case_demo');
-    const showCap = variant === 'capacity';
+    const showCapMen = variant === 'capacity';
+    const showCapWomen = false;
     const showCategory = variant === 'good_bad';
     const showResidentParams = variant === 'capacity';
 
@@ -564,8 +680,8 @@
     els.residentAppsRangeField.classList.toggle('hidden', !showResidentParams);
     els.advancedDetails.hidden = variant === 'classic';
 
-    els.menEditorTableEl.classList.toggle('hide-cap-col', !showCap);
-    els.womenEditorTableEl.classList.toggle('hide-cap-col', !showCap);
+    els.menEditorTableEl.classList.toggle('hide-cap-col', !showCapMen);
+    els.womenEditorTableEl.classList.toggle('hide-cap-col', !showCapWomen);
     els.menEditorTableEl.classList.toggle('hide-cat-col', !showCategory);
     els.womenEditorTableEl.classList.toggle('hide-cat-col', !showCategory);
     if (variant === 'capacity') {
@@ -1046,6 +1162,7 @@
   }
 
   function initializeEngine() {
+    cancelOptimalityJob();
     state.engine = createEngine(state.instance, state.proposerSide);
     state.logEntries = [t('step_initial')];
     state.exhaustedProposers = new Set();
@@ -1152,7 +1269,9 @@
     if (event.type === 'finished') {
       stopAuto(false);
       setStatus('status_finished');
-      state.insightsCache = GSAlgorithms.analyzeSnapshot(state.instance, state.proposerSide, state.engine.getSnapshot());
+      const doneSnapshot = state.engine.getSnapshot();
+      state.insightsCache = GSAlgorithms.analyzeSnapshot(state.instance, state.proposerSide, doneSnapshot);
+      startOptimalityEmpiricalComputation(doneSnapshot);
     } else if (state.autoTimer) {
       setStatus('status_running');
     } else if (text) {
@@ -1181,6 +1300,7 @@
 
     state.logEntries.push(t('status_full'));
     state.insightsCache = GSAlgorithms.analyzeSnapshot(state.instance, state.proposerSide, snapshot);
+    startOptimalityEmpiricalComputation(snapshot);
     setStatus('status_full');
     renderAll();
   }
@@ -1588,7 +1708,9 @@
 
   function prefTableHtml(side, names, prefsMap, partnersMap, activeRowName, activeTarget) {
     const maxPrefLen = names.reduce((acc, name) => Math.max(acc, (prefsMap[name] || []).length), 0);
-    const maxCols = maxPrefLen <= 12 ? maxPrefLen : 8;
+    const sideBySideCols = maxPrefLen <= 12 ? maxPrefLen : 8;
+    const stackedCols = maxPrefLen <= 24 ? maxPrefLen : 24;
+    const maxCols = state.prefTablesStacked ? stackedCols : sideBySideCols;
 
     const headerCols = [];
     for (let i = 0; i < maxCols; i += 1) {
@@ -1990,16 +2112,21 @@
     const snapshot = state.engine.getSnapshot();
     if (snapshot.done && !state.insightsCache) {
       state.insightsCache = GSAlgorithms.analyzeSnapshot(state.instance, state.proposerSide, snapshot);
+      startOptimalityEmpiricalComputation(snapshot);
     }
 
     const showGoodBadInsight = state.variant === 'good_bad';
 
     if (!snapshot.done || !state.insightsCache) {
+      const zeroProgressText = t('insight_optimal_progress', {
+        states: formatCount(0),
+        count: formatCount(0)
+      });
       const pendingCards = [
         insightCardHtml('neutral', t('insight_perfect_title'), t('insight_pending')),
         insightCardHtml('neutral', t('insight_stable_title'), t('insight_pending')),
         insightCardHtml('neutral', t('insight_terminates_title'), t('insight_pending')),
-        insightCardHtml('neutral', t('insight_optimal_title'), t('insight_pending'))
+        insightCardHtml('neutral', t('insight_optimal_title'), t('insight_pending'), zeroProgressText)
       ];
       if (showGoodBadInsight) {
         pendingCards.push(insightCardHtml('neutral', t('insight_good_bad_title'), t('insight_pending')));
@@ -2020,23 +2147,47 @@
 
     let optimalText = t('insight_optimal_not_applicable');
     let optimalClass = 'neutral';
+    const empirical = insight.optimality && insight.optimality.empirical ? insight.optimality.empirical : null;
+    const optimalMeta = t('insight_optimal_progress', {
+      states: formatCount(empirical && Number.isFinite(empirical.statesExplored) ? empirical.statesExplored : 0),
+      count: formatCount(empirical && Number.isFinite(empirical.count) ? empirical.count : 0)
+    });
 
     if (insight.optimality.mode === 'current') {
-      const ok = Boolean(insight.optimality.proposerOptimal) && Boolean(insight.optimality.receiverPessimal);
-      const optimalKey = insight.optimality.context === 'many_to_one'
-        ? 'insight_optimal_current_many_to_one'
-        : 'insight_optimal_current';
-      optimalText = ok
-        ? `${t('insight_true')} - ${t(optimalKey)}`
-        : t('insight_false');
-      optimalClass = ok ? 'good' : 'bad';
+      const empiricalMode = empirical && empirical.mode ? empirical.mode : 'pending';
+
+      if (empiricalMode === 'running' || empiricalMode === 'pending') {
+        optimalText = t('insight_optimal_computing');
+        optimalClass = 'neutral';
+      } else if (empiricalMode === 'skipped') {
+        optimalText = t('insight_optimal_empirical_skipped', {
+          reason: t(empirical.reason || 'empirical_reason_not_run')
+        });
+        optimalClass = 'neutral';
+      } else {
+        const ok = Boolean(insight.optimality.proposerOptimal) && Boolean(insight.optimality.receiverPessimal);
+        const optimalKey = insight.optimality.context === 'many_to_one'
+          ? 'insight_optimal_current_many_to_one'
+          : 'insight_optimal_current';
+        optimalText = ok
+          ? `${t('insight_true')} - ${t(optimalKey)}`
+          : t('insight_false');
+        optimalClass = ok ? 'good' : 'bad';
+
+        if (empirical && empirical.mode === 'checked') {
+          const empiricalText = empirical.count > 0
+            ? t('insight_optimal_empirical_checked', { count: empirical.count })
+            : t('insight_optimal_empirical_none');
+          optimalText = `${optimalText} (${empiricalText})`;
+        }
+      }
     }
 
     const cards = [
       insightCardHtml(insight.perfect ? 'good' : 'bad', t('insight_perfect_title'), perfectText),
       insightCardHtml(insight.instabilityCount === 0 ? 'good' : 'bad', t('insight_stable_title'), stableText),
       insightCardHtml(insight.terminatesWithinBound ? 'good' : 'bad', t('insight_terminates_title'), termText),
-      insightCardHtml(optimalClass, t('insight_optimal_title'), optimalText)
+      insightCardHtml(optimalClass, t('insight_optimal_title'), optimalText, optimalMeta)
     ];
 
     if (showGoodBadInsight) {
@@ -2060,10 +2211,11 @@
     els.insightsGrid.innerHTML = cards.join('');
   }
 
-  function insightCardHtml(type, title, value) {
+  function insightCardHtml(type, title, value, meta = '') {
     return `
       <article class="insight-card ${type}">
         <span class="title">${escapeHtml(title)}</span>
+        ${meta ? `<small class="meta">${escapeHtml(meta)}</small>` : ''}
         <strong class="value">${escapeHtml(value)}</strong>
       </article>
     `;
@@ -2294,6 +2446,7 @@
   }
 
   function renderAll() {
+    updatePrefLayoutToggle();
     updateDynamicLabels();
     renderStatus();
     renderCounters();
@@ -2309,12 +2462,13 @@
 
   function applyTablesToInstance() {
     state.variant = els.variantSelect.value;
-    const includeCap = state.variant === 'capacity';
+    const includeCapMen = state.variant === 'capacity';
+    const includeCapWomen = false;
     const includeCategory = state.variant === 'good_bad';
     const includeForbidden = state.variant === 'forbidden';
 
-    const menData = parseEditorRows(els.menEditorTable, 'men', { includeCap, includeCategory });
-    const womenData = parseEditorRows(els.womenEditorTable, 'women', { includeCap, includeCategory });
+    const menData = parseEditorRows(els.menEditorTable, 'men', { includeCap: includeCapMen, includeCategory });
+    const womenData = parseEditorRows(els.womenEditorTable, 'women', { includeCap: includeCapWomen, includeCategory });
 
     try {
       const baseInstance = GSAlgorithms.normalizeInstance({
@@ -2642,6 +2796,14 @@
         if (state.variant === 'capacity') {
           syncResidentMatchingBounds();
         }
+      });
+    }
+
+    if (els.prefLayoutToggleBtn) {
+      els.prefLayoutToggleBtn.addEventListener('click', () => {
+        state.prefTablesStacked = !state.prefTablesStacked;
+        updatePrefLayoutToggle();
+        renderPrefTables();
       });
     }
 

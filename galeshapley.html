@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Gale-Shapley Stable Matching Visualizer</title>
+  <title>Stable Matching Visualizer</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22%3E%3Ctext y=%22.9em%22 font-size=%2290%22%3E%E2%9D%A4%EF%B8%8F%3C/text%3E%3C/svg%3E">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -13,7 +13,7 @@
 <body class="theme-light" data-lang="en">
   <header>
     <div class="header-title-wrap">
-      <h1 data-i18n="app_title">Gale-Shapley Stable Matching Visualizer</h1>
+      <h1 data-i18n="app_title">Stable Matching Visualizer</h1>
       <p data-i18n="app_subtitle">Explore step-by-step proposals, engagements, and stability properties.</p>
     </div>
     <div class="header-controls">
@@ -186,15 +186,20 @@
       <article id="tabSim" class="tab-panel active" role="tabpanel">
         <div class="sim-grid" id="simGrid">
           <section class="visual-column" id="visualColumn">
-            <div class="pref-pair">
-              <article class="pref-box">
-                <h3 id="menPrefTitle" data-i18n="men_pref_title">Men preferences</h3>
-                <div id="menPrefTable" class="pref-table-wrap"></div>
-              </article>
-              <article class="pref-box">
-                <h3 id="womenPrefTitle" data-i18n="women_pref_title">Women preferences</h3>
-                <div id="womenPrefTable" class="pref-table-wrap"></div>
-              </article>
+            <div class="pref-pair-wrap">
+              <div class="pref-pair-toolbar">
+                <button id="prefLayoutToggleBtn" type="button" class="secondary pref-layout-btn">Stack tables</button>
+              </div>
+              <div class="pref-pair" id="prefPair">
+                <article class="pref-box">
+                  <h3 id="menPrefTitle" data-i18n="men_pref_title">Men preferences</h3>
+                  <div id="menPrefTable" class="pref-table-wrap"></div>
+                </article>
+                <article class="pref-box">
+                  <h3 id="womenPrefTitle" data-i18n="women_pref_title">Women preferences</h3>
+                  <div id="womenPrefTable" class="pref-table-wrap"></div>
+                </article>
+              </div>
             </div>
 
             <article class="step-log-box">
@@ -222,7 +227,7 @@
 
           <section class="code-column" id="codeColumn">
             <button id="toggleCodeBtn" class="icon-btn panel-toggle-btn" data-i18n-title="toggle_code_hide" aria-label="Collapse algorithm panel">📜-</button>
-            <h3 data-i18n="code_title">Algorithm code</h3>
+            <h3 data-i18n="code_title">Gale-Shapley Algorithm code</h3>
             <div id="codeDisplay" class="code-display"></div>
 
             <h3 data-i18n="ds_title">Data structures</h3>
@@ -379,6 +384,9 @@
           <li><em>Algorithm Design</em>, Jon Kleinberg and Éva Tardos.</li>
           <li><a href="https://www.cs.princeton.edu/~wayne/kleinberg-tardos/pdf/01DemoGaleShapley.pdf" target="_blank" rel="noopener noreferrer">Princeton demo: Gale-Shapley</a>.</li>
           <li><a href="https://github.com/BrunoGrisci/stable-matching-visualizer" target="_blank" rel="noopener noreferrer">Project repository</a>.</li>
+          <li>Irving, Robert W. (1985). &quot;An efficient algorithm for the &quot;stable roommates&quot; problem&quot;. <em>Journal of Algorithms</em>. 6 (4): 577-595. <a href="https://doi.org/10.1016/0196-6774(85)90033-1" target="_blank" rel="noopener noreferrer">doi:10.1016/0196-6774(85)90033-1</a>.</li>
+          <li><a href="https://en.wikipedia.org/wiki/Stable_roommates_problem" target="_blank" rel="noopener noreferrer">Stable roommates problem</a>.</li>
+          <li><a href="https://www.youtube.com/watch?v=5QLxAp8mRKo" target="_blank" rel="noopener noreferrer">Irving's Algorithm and Stable Roommates Problem</a>.</li>
         </ol>
         <p><strong data-i18n="see_more_algorithms">See more algorithms</strong></p>
         <p><a href="https://github.com/BrunoGrisci/projeto-e-analise-de-algoritmos" target="_blank" rel="noopener noreferrer">https://github.com/BrunoGrisci/projeto-e-analise-de-algoritmos</a></p>

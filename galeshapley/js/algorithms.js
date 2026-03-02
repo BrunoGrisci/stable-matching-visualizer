@@ -700,6 +700,463 @@
     return count;
   }
 
+  function getProposerCapacityForSide(orientation, proposer, capacitySide = 'receiver') {
+    if (capacitySide !== 'proposer') {
+      return 1;
+    }
+    const cap = orientation.proposerCaps[proposer];
+    return Number.isFinite(cap) ? Math.max(1, cap) : 1;
+  }
+
+  function getReceiverCapacityForSide(orientation, receiver, capacitySide = 'receiver') {
+    if (capacitySide !== 'receiver') {
+      return 1;
+    }
+    const cap = orientation.receiverCaps[receiver];
+    return Number.isFinite(cap) ? Math.max(1, cap) : 1;
+  }
+
+  function buildOutcomeVector(rankMap, prefLen, partners, capacity) {
+    const noPartnerRank = prefLen + 1;
+    const vec = [];
+    const list = Array.isArray(partners) ? partners : [];
+    for (const partner of list) {
+      const rank = Object.prototype.hasOwnProperty.call(rankMap, partner)
+        ? rankMap[partner] + 1
+        : noPartnerRank;
+      vec.push(rank);
+    }
+    vec.sort((a, b) => a - b);
+    while (vec.length < capacity) {
+      vec.push(noPartnerRank);
+    }
+    if (vec.length > capacity) {
+      vec.length = capacity;
+    }
+    return vec;
+  }
+
+  function compareRankVectors(a, b) {
+    const len = Math.max(a.length, b.length);
+    for (let i = 0; i < len; i += 1) {
+      const av = i < a.length ? a[i] : Number.POSITIVE_INFINITY;
+      const bv = i < b.length ? b[i] : Number.POSITIVE_INFINITY;
+      if (av < bv) return -1;
+      if (av > bv) return 1;
+    }
+    return 0;
+  }
+
+  function enumerateStableMatchingsForOptimality(instance, snapshot, limits = {}) {
+    const orientation = snapshot.orientation;
+    const capacitySide = snapshot.capacitySide || 'receiver';
+    const proposers = orientation.proposers;
+    const receivers = orientation.receivers;
+
+    const maxStates = Number.isFinite(limits.maxStates) ? limits.maxStates : 1000000;
+    const maxStableMatchings = Number.isFinite(limits.maxStableMatchings) ? limits.maxStableMatchings : 5000;
+
+    const proposerCaps = {};
+    const receiverCaps = {};
+
+    for (const proposer of proposers) {
+      const cap = getProposerCapacityForSide(orientation, proposer, capacitySide);
+      proposerCaps[proposer] = cap;
+    }
+    for (const receiver of receivers) {
+      const cap = getReceiverCapacityForSide(orientation, receiver, capacitySide);
+      receiverCaps[receiver] = cap;
+    }
+
+    const currentProposerVectors = {};
+    const currentReceiverVectors = {};
+    for (const proposer of proposers) {
+      currentProposerVectors[proposer] = buildOutcomeVector(
+        orientation.pRank[proposer] || {},
+        (orientation.pPrefs[proposer] || []).length,
+        snapshot.proposerMatch[proposer] || [],
+        proposerCaps[proposer]
+      );
+    }
+    for (const receiver of receivers) {
+      currentReceiverVectors[receiver] = buildOutcomeVector(
+        orientation.rRank[receiver] || {},
+        (orientation.rPrefs[receiver] || []).length,
+        snapshot.receiverMatches[receiver] || [],
+        receiverCaps[receiver]
+      );
+    }
+
+    const proposerMatch = Object.fromEntries(proposers.map((p) => [p, []]));
+    const receiverMatches = Object.fromEntries(receivers.map((r) => [r, []]));
+
+    let proposerOptimal = true;
+    let receiverPessimal = true;
+    let stableCount = 0;
+    let statesExplored = 0;
+    let aborted = false;
+    let abortReason = null;
+
+    function countState() {
+      statesExplored += 1;
+      if (statesExplored > maxStates) {
+        aborted = true;
+        abortReason = 'empirical_reason_state_limit';
+        return false;
+      }
+      return true;
+    }
+
+    function evaluateCurrentAssignment() {
+      if (!countState()) {
+        return;
+      }
+
+      const instabilityCount = countInstabilities(orientation, proposerMatch, receiverMatches, capacitySide);
+      if (instabilityCount !== 0) {
+        return;
+      }
+
+      stableCount += 1;
+      if (stableCount > maxStableMatchings) {
+        aborted = true;
+        abortReason = 'empirical_reason_matching_limit';
+        return;
+      }
+
+      if (proposerOptimal) {
+        for (const proposer of proposers) {
+          const candidateVec = buildOutcomeVector(
+            orientation.pRank[proposer] || {},
+            (orientation.pPrefs[proposer] || []).length,
+            proposerMatch[proposer] || [],
+            proposerCaps[proposer]
+          );
+          if (compareRankVectors(candidateVec, currentProposerVectors[proposer]) < 0) {
+            proposerOptimal = false;
+            break;
+          }
+        }
+      }
+
+      if (receiverPessimal) {
+        for (const receiver of receivers) {
+          const candidateVec = buildOutcomeVector(
+            orientation.rRank[receiver] || {},
+            (orientation.rPrefs[receiver] || []).length,
+            receiverMatches[receiver] || [],
+            receiverCaps[receiver]
+          );
+          if (compareRankVectors(candidateVec, currentReceiverVectors[receiver]) > 0) {
+            receiverPessimal = false;
+            break;
+          }
+        }
+      }
+    }
+
+    function chooseForProposer(proposer, prefs, cap, idx, chosen, nextStep) {
+      if (aborted || !countState()) {
+        return;
+      }
+
+      if (chosen.length >= cap || idx >= prefs.length) {
+        proposerMatch[proposer] = chosen.slice();
+        nextStep();
+        proposerMatch[proposer] = [];
+        return;
+      }
+
+      chooseForProposer(proposer, prefs, cap, idx + 1, chosen, nextStep);
+      if (aborted) {
+        return;
+      }
+
+      const receiver = prefs[idx];
+      const receiverList = receiverMatches[receiver];
+      if (receiverList && receiverList.length < receiverCaps[receiver]) {
+        receiverList.push(proposer);
+        chosen.push(receiver);
+        chooseForProposer(proposer, prefs, cap, idx + 1, chosen, nextStep);
+        chosen.pop();
+        receiverList.pop();
+      }
+    }
+
+    function assignProposer(index) {
+      if (aborted || !countState()) {
+        return;
+      }
+      if (index >= proposers.length) {
+        evaluateCurrentAssignment();
+        return;
+      }
+
+      const proposer = proposers[index];
+      const prefs = orientation.pPrefs[proposer] || [];
+      const cap = proposerCaps[proposer];
+      chooseForProposer(proposer, prefs, cap, 0, [], () => assignProposer(index + 1));
+    }
+
+    assignProposer(0);
+
+    if (aborted) {
+      return {
+        mode: 'skipped',
+        reason: abortReason || 'empirical_reason_state_limit',
+        count: stableCount,
+        statesExplored,
+        proposerOptimal,
+        receiverPessimal
+      };
+    }
+
+    if (stableCount === 0) {
+      return {
+        mode: 'checked',
+        reason: 'empirical_reason_no_stable',
+        count: 0,
+        statesExplored,
+        proposerOptimal: false,
+        receiverPessimal: false
+      };
+    }
+
+    return {
+      mode: 'checked',
+      reason: null,
+      count: stableCount,
+      statesExplored,
+      proposerOptimal,
+      receiverPessimal
+    };
+  }
+
+  function createEmpiricalOptimalityEnumerator(instance, snapshot, limits = {}) {
+    const orientation = snapshot.orientation;
+    const capacitySide = snapshot.capacitySide || 'receiver';
+    const proposers = orientation.proposers;
+    const receivers = orientation.receivers;
+
+    const maxStates = Number.isFinite(limits.maxStates) ? limits.maxStates : 1000000;
+    const maxStableMatchings = Number.isFinite(limits.maxStableMatchings) ? limits.maxStableMatchings : 5000;
+
+    const proposerCaps = {};
+    const receiverCaps = {};
+    for (const proposer of proposers) {
+      proposerCaps[proposer] = getProposerCapacityForSide(orientation, proposer, capacitySide);
+    }
+    for (const receiver of receivers) {
+      receiverCaps[receiver] = getReceiverCapacityForSide(orientation, receiver, capacitySide);
+    }
+
+    const currentProposerVectors = {};
+    const currentReceiverVectors = {};
+    for (const proposer of proposers) {
+      currentProposerVectors[proposer] = buildOutcomeVector(
+        orientation.pRank[proposer] || {},
+        (orientation.pPrefs[proposer] || []).length,
+        snapshot.proposerMatch[proposer] || [],
+        proposerCaps[proposer]
+      );
+    }
+    for (const receiver of receivers) {
+      currentReceiverVectors[receiver] = buildOutcomeVector(
+        orientation.rRank[receiver] || {},
+        (orientation.rPrefs[receiver] || []).length,
+        snapshot.receiverMatches[receiver] || [],
+        receiverCaps[receiver]
+      );
+    }
+
+    const proposerMatch = Object.fromEntries(proposers.map((p) => [p, []]));
+    const receiverMatches = Object.fromEntries(receivers.map((r) => [r, []]));
+
+    let proposerOptimal = true;
+    let receiverPessimal = true;
+    let stableCount = 0;
+    let statesExplored = 0;
+    let aborted = false;
+    let abortReason = null;
+    let done = false;
+
+    function countState() {
+      statesExplored += 1;
+      if (statesExplored > maxStates) {
+        aborted = true;
+        abortReason = 'empirical_reason_state_limit';
+        return false;
+      }
+      return true;
+    }
+
+    function buildStatus() {
+      if (!done) {
+        return {
+          mode: 'running',
+          reason: null,
+          count: stableCount,
+          statesExplored,
+          proposerOptimal: null,
+          receiverPessimal: null
+        };
+      }
+
+      if (aborted) {
+        return {
+          mode: 'skipped',
+          reason: abortReason || 'empirical_reason_state_limit',
+          count: stableCount,
+          statesExplored,
+          proposerOptimal: null,
+          receiverPessimal: null
+        };
+      }
+
+      if (stableCount === 0) {
+        return {
+          mode: 'checked',
+          reason: 'empirical_reason_no_stable',
+          count: 0,
+          statesExplored,
+          proposerOptimal: false,
+          receiverPessimal: false
+        };
+      }
+
+      return {
+        mode: 'checked',
+        reason: null,
+        count: stableCount,
+        statesExplored,
+        proposerOptimal,
+        receiverPessimal
+      };
+    }
+
+    function* chooseForProposer(proposer, prefs, cap, idx, chosen, nextStep) {
+      if (aborted || !countState()) {
+        return;
+      }
+      yield 0;
+
+      if (chosen.length >= cap || idx >= prefs.length) {
+        proposerMatch[proposer] = chosen.slice();
+        yield* nextStep();
+        proposerMatch[proposer] = [];
+        return;
+      }
+
+      yield* chooseForProposer(proposer, prefs, cap, idx + 1, chosen, nextStep);
+      if (aborted) {
+        return;
+      }
+
+      const receiver = prefs[idx];
+      const receiverList = receiverMatches[receiver];
+      if (receiverList && receiverList.length < receiverCaps[receiver]) {
+        receiverList.push(proposer);
+        chosen.push(receiver);
+        yield* chooseForProposer(proposer, prefs, cap, idx + 1, chosen, nextStep);
+        chosen.pop();
+        receiverList.pop();
+      }
+    }
+
+    function* assignProposer(index) {
+      if (aborted || !countState()) {
+        return;
+      }
+      yield 0;
+
+      if (index >= proposers.length) {
+        if (aborted || !countState()) {
+          return;
+        }
+        yield 0;
+
+        const instabilityCount = countInstabilities(orientation, proposerMatch, receiverMatches, capacitySide);
+        if (instabilityCount !== 0) {
+          return;
+        }
+
+        stableCount += 1;
+        if (stableCount > maxStableMatchings) {
+          aborted = true;
+          abortReason = 'empirical_reason_matching_limit';
+          return;
+        }
+
+        if (proposerOptimal) {
+          for (const proposer of proposers) {
+            const candidateVec = buildOutcomeVector(
+              orientation.pRank[proposer] || {},
+              (orientation.pPrefs[proposer] || []).length,
+              proposerMatch[proposer] || [],
+              proposerCaps[proposer]
+            );
+            if (compareRankVectors(candidateVec, currentProposerVectors[proposer]) < 0) {
+              proposerOptimal = false;
+              break;
+            }
+          }
+        }
+
+        if (receiverPessimal) {
+          for (const receiver of receivers) {
+            const candidateVec = buildOutcomeVector(
+              orientation.rRank[receiver] || {},
+              (orientation.rPrefs[receiver] || []).length,
+              receiverMatches[receiver] || [],
+              receiverCaps[receiver]
+            );
+            if (compareRankVectors(candidateVec, currentReceiverVectors[receiver]) > 0) {
+              receiverPessimal = false;
+              break;
+            }
+          }
+        }
+        return;
+      }
+
+      const proposer = proposers[index];
+      const prefs = orientation.pPrefs[proposer] || [];
+      const cap = proposerCaps[proposer];
+      yield* chooseForProposer(proposer, prefs, cap, 0, [], () => assignProposer(index + 1));
+    }
+
+    const iterator = assignProposer(0);
+
+    function step(maxYields = 2200) {
+      if (done) {
+        return buildStatus();
+      }
+
+      const budget = Math.max(1, toInt(maxYields, 2200));
+      let used = 0;
+      while (!done && used < budget) {
+        const next = iterator.next();
+        used += 1;
+        if (next.done || aborted) {
+          done = true;
+        }
+      }
+      if (aborted) {
+        done = true;
+      }
+      return buildStatus();
+    }
+
+    function getStatus() {
+      return buildStatus();
+    }
+
+    return {
+      step,
+      getStatus
+    };
+  }
+
   function evaluatePerfect(snapshot) {
     const orientation = snapshot.orientation;
     const capacitySide = snapshot.capacitySide || 'receiver';
@@ -830,14 +1287,54 @@
       snapshot.capacitySide || 'receiver'
     );
     const perfect = evaluatePerfect(snapshot);
-    const optimality = snapshot.done
-      ? evaluateOptimality(instance, orientation, snapshot.capacitySide || 'receiver')
-      : {
+    let optimality;
+    if (snapshot.done) {
+      optimality = evaluateOptimality(instance, orientation, snapshot.capacitySide || 'receiver');
+      // The proposer-optimal/receiver-pessimal claim is only valid for stable outcomes.
+      if (optimality.mode === 'current' && instabilityCount !== 0) {
+        optimality = {
+          ...optimality,
+          empirical: {
+            mode: 'skipped',
+            reason: 'empirical_reason_unstable_output',
+            count: 0,
+            statesExplored: 0,
+            proposerOptimal: null,
+            receiverPessimal: null
+          },
+          proposerOptimal: false,
+          receiverPessimal: false
+        };
+      } else if (optimality.mode === 'current') {
+        const empirical = {
+          mode: 'pending',
+          reason: null,
+          count: 0,
+          statesExplored: 0,
+          proposerOptimal: null,
+          receiverPessimal: null
+        };
+        optimality = {
+          ...optimality,
+          empirical
+        };
+      }
+    } else {
+      optimality = {
         mode: 'pending',
         proposerOptimal: null,
         receiverPessimal: null,
-        context: null
+        context: null,
+        empirical: {
+          mode: 'pending',
+          reason: null,
+          count: 0,
+          statesExplored: 0,
+          proposerOptimal: null,
+          receiverPessimal: null
+        }
       };
+    }
     const goodBadProperty = snapshot.done
       ? evaluateGoodManGoodWomanProperty(instance, snapshot.pairs)
       : {
@@ -1526,6 +2023,7 @@
     createResidentMatchingInstance,
     buildOrientation,
     analyzeSnapshot,
+    createEmpiricalOptimalityEnumerator,
     GSEngine,
 
     presets: {
