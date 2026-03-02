@@ -47,9 +47,9 @@
           <option value="random" data-i18n="preset_random">Random</option>
           <option value="inverse" data-i18n="preset_inverse">Inverse</option>
           <option value="easy" data-i18n="preset_easy">Easy</option>
-          <option value="room_wiki" data-i18n="preset_room_wiki" hidden>Wikipedia (6 participants)</option>
-          <option value="room_wiki_no_solution" data-i18n="preset_room_wiki_no_solution" hidden>Wikipedia no solution</option>
-          <option value="room_transcript_no_solution" data-i18n="preset_room_transcript_no_solution" hidden>Transcript no solution</option>
+          <option value="room_wiki" data-i18n="preset_room_wiki" hidden>6 participants (Wikipedia)</option>
+          <option value="room_joy_yeh" data-i18n="preset_room_joy_yeh" hidden>6 participants (Joy Yeh)</option>
+          <option value="room_wiki_no_solution" data-i18n="preset_room_wiki_no_solution" hidden>Minimal no solution (Wikipedia)</option>
         </select>
         <p id="presetNote" class="field-note"></p>
 
@@ -171,11 +171,23 @@
 
       <div class="counters-panel">
         <div class="counter-item">
-          <span data-i18n="counter_proposals">Proposals</span>
+          <span id="proposalLabel" data-i18n="counter_proposals">Proposals</span>
           <strong id="proposalCount">0</strong>
         </div>
+        <div id="roomDeletionCard" class="counter-item roommates-only-counter hidden">
+          <span id="roomDeletionLabel" data-i18n="counter_room_pref_deletions">Preference deletions (D)</span>
+          <strong id="roomDeletionCount">0</strong>
+        </div>
+        <div id="roomRotationCard" class="counter-item roommates-only-counter hidden">
+          <span id="roomRotationLabel" data-i18n="counter_room_rotations">Rotations found (R)</span>
+          <strong id="roomRotationCount">0</strong>
+        </div>
+        <div id="roomOpsCard" class="counter-item roommates-only-counter hidden">
+          <span id="roomOpsLabel" data-i18n="counter_room_ops_total">Irving ops (P + D + R)</span>
+          <strong id="roomOpsCount">0</strong>
+        </div>
         <div class="counter-item">
-          <span data-i18n="counter_engaged">Engaged pairs</span>
+          <span id="engagedLabel" data-i18n="counter_engaged">Engaged pairs</span>
           <strong id="engagedCount">0</strong>
         </div>
         <div class="counter-item">
@@ -299,6 +311,7 @@
 
       <article id="tabCurves" class="tab-panel" role="tabpanel">
         <div class="curve-controls">
+          <h3 id="curveAlgoTitle">Gale-Shapley Algorithm</h3>
           <div class="field-grid curve-grid">
             <div class="curve-field">
               <label for="curveStartInput" data-i18n="curve_start">n start</label>
@@ -350,7 +363,7 @@
         </div>
 
         <article class="curve-chart-box">
-          <h3 data-i18n="curve_chart_title">Proposal curves by instance size</h3>
+          <h3 id="curveChartTitle" data-i18n="curve_chart_title">Proposal curves by instance size</h3>
           <div class="curve-chart-area" id="curveChartArea">
             <svg id="curveChartSvg" viewBox="0 0 960 380" role="img" aria-label="Gale-Shapley proposal curves"></svg>
             <div id="curveTooltip" class="curve-tooltip" hidden></div>
@@ -358,7 +371,7 @@
         </article>
 
         <article class="curve-table-box">
-          <h3 data-i18n="curve_table_title">Average proposals table</h3>
+          <h3 id="curveTableTitle" data-i18n="curve_table_title">Average proposals table</h3>
           <div class="curve-table-wrap">
             <table id="curveTable" class="curve-table"></table>
           </div>

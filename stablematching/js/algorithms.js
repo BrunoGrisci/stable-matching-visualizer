@@ -1698,6 +1698,21 @@
     });
   }
 
+  function createRoommatesJoyYehExample() {
+    return normalizeRoommatesInstance({
+      name: 'roommates_joy_yeh',
+      people: ['A', 'B', 'C', 'D', 'E', 'F'],
+      prefs: {
+        A: ['B', 'D', 'F', 'C', 'E'],
+        B: ['D', 'E', 'F', 'A', 'C'],
+        C: ['D', 'E', 'F', 'A', 'B'],
+        D: ['F', 'C', 'A', 'E', 'B'],
+        E: ['F', 'C', 'D', 'B', 'A'],
+        F: ['A', 'B', 'D', 'C', 'E']
+      }
+    });
+  }
+
   function createRoommatesWikipediaNoSolution() {
     return normalizeRoommatesInstance({
       name: 'roommates_wikipedia_no_solution',
@@ -1707,19 +1722,6 @@
         B: ['C', 'A', 'D'],
         C: ['A', 'B', 'D'],
         D: ['A', 'B', 'C']
-      }
-    });
-  }
-
-  function createRoommatesTranscriptNoSolution() {
-    return normalizeRoommatesInstance({
-      name: 'roommates_transcript_no_solution',
-      people: ['A', 'B', 'C', 'M'],
-      prefs: {
-        A: ['B', 'C', 'M'],
-        B: ['C', 'A', 'M'],
-        C: ['A', 'B', 'M'],
-        M: ['A', 'B', 'C']
       }
     });
   }
@@ -1788,6 +1790,8 @@
       this.rotation = null;
 
       this.proposalCount = 0;
+      this.preferenceDeletionCount = 0;
+      this.rotationCount = 0;
       this.stepCount = 0;
       this.done = false;
       this.hasStableMatching = null;
@@ -1824,6 +1828,7 @@
       this.left[a][b] = -1;
       this.right[a][b] = -1;
       this.size[a] -= 1;
+      this.preferenceDeletionCount += 1;
       return true;
     }
 
@@ -1856,16 +1861,33 @@
       });
     }
 
-    finishStable(line = 49) {
+    finishStable(line = 49, key = 'step_room_finished_stable', data = {}) {
       this.done = true;
       this.hasStableMatching = true;
       this.phase = 'done_stable';
       return this.emit({
         type: 'finished',
-        key: 'step_room_finished_stable',
+        key,
         line,
-        noStable: false
+        noStable: false,
+        ...data
       });
+    }
+
+    allMutualTopChoicePairs() {
+      for (let p = 0; p < this.n; p += 1) {
+        const q = this.hold[p];
+        if (q === -1) {
+          return false;
+        }
+        if (this.hold[q] !== p) {
+          return false;
+        }
+        if (this.pref[p][0] !== q || this.pref[q][0] !== p) {
+          return false;
+        }
+      }
+      return true;
     }
 
     collectReducedList(p) {
@@ -1959,6 +1981,10 @@
           proposer: this.idxName(p),
           receiver: this.idxName(q)
         });
+      }
+
+      if (this.allMutualTopChoicePairs()) {
+        return this.finishStable(20, 'step_room_finished_mutual_top');
       }
 
       this.phase = 'phase1_trim';
@@ -2058,6 +2084,7 @@
         succNode: -1
       };
       this.phase = 'phase2_eliminate_reject';
+      this.rotationCount += 1;
 
       return this.emit({
         type: 'room_rotation_found',
@@ -2234,6 +2261,9 @@
         done: this.done,
         hasStableMatching: this.done ? Boolean(this.hasStableMatching) : null,
         proposalCount: this.proposalCount,
+        preferenceDeletionCount: this.preferenceDeletionCount,
+        rotationCount: this.rotationCount,
+        irvingOperationCount: this.proposalCount + this.preferenceDeletionCount + this.rotationCount,
         stepCount: this.stepCount,
         lastEvent: this.lastEvent,
         phase: this.phase,
@@ -2911,8 +2941,8 @@
 
     roommatesPresets: {
       wikipedia: createRoommatesWikipediaExample,
+      joyYeh: createRoommatesJoyYehExample,
       wikipediaNoSolution: createRoommatesWikipediaNoSolution,
-      transcriptNoSolution: createRoommatesTranscriptNoSolution,
       random: createRoommatesRandomInstance,
       inverse: createRoommatesInverseInstance,
       easy: createRoommatesEasyInstance,

@@ -87,8 +87,8 @@
     presetLabel: document.getElementById('presetLabel'),
     presetHplOption: document.querySelector('#presetSelect option[value="hpl_spl"]'),
     presetRoomWikiOption: document.querySelector('#presetSelect option[value="room_wiki"]'),
+    presetRoomJoyYehOption: document.querySelector('#presetSelect option[value="room_joy_yeh"]'),
     presetRoomWikiNoSolutionOption: document.querySelector('#presetSelect option[value="room_wiki_no_solution"]'),
-    presetRoomTranscriptNoSolutionOption: document.querySelector('#presetSelect option[value="room_transcript_no_solution"]'),
     pairsLabel: document.getElementById('pairsLabel'),
     pairsInput: document.getElementById('pairsInput'),
     goodCountInput: document.getElementById('goodCountInput'),
@@ -137,12 +137,20 @@
     statusBar: document.getElementById('statusBar'),
     advancedDetails: document.getElementById('advancedDetails'),
 
+    proposalLabel: document.getElementById('proposalLabel'),
+    engagedLabel: document.getElementById('engagedLabel'),
     proposalCount: document.getElementById('proposalCount'),
+    roomDeletionCount: document.getElementById('roomDeletionCount'),
+    roomRotationCount: document.getElementById('roomRotationCount'),
+    roomOpsCount: document.getElementById('roomOpsCount'),
     engagedCount: document.getElementById('engagedCount'),
     singleMenCount: document.getElementById('singleMenCount'),
     singleWomenCount: document.getElementById('singleWomenCount'),
     singleLeftLabel: document.getElementById('singleLeftLabel'),
     singleRightLabel: document.getElementById('singleRightLabel'),
+    roomDeletionCard: document.getElementById('roomDeletionCard'),
+    roomRotationCard: document.getElementById('roomRotationCard'),
+    roomOpsCard: document.getElementById('roomOpsCard'),
     singleLeftCard: document.getElementById('singleLeftLabel').closest('.counter-item'),
     singleRightCard: document.getElementById('singleRightLabel').closest('.counter-item'),
 
@@ -196,6 +204,9 @@
     runCurvesBtn: document.getElementById('runCurvesBtn'),
     stopCurvesBtn: document.getElementById('stopCurvesBtn'),
     curveStatus: document.getElementById('curveStatus'),
+    curveAlgoTitle: document.getElementById('curveAlgoTitle'),
+    curveChartTitle: document.getElementById('curveChartTitle'),
+    curveTableTitle: document.getElementById('curveTableTitle'),
     curveChartArea: document.getElementById('curveChartArea'),
     curveChartSvg: document.getElementById('curveChartSvg'),
     curveTooltip: document.getElementById('curveTooltip'),
@@ -352,6 +363,26 @@
     };
   }
 
+  function curveYAxisLabelText() {
+    const key = isRoommatesVariant(state.variant)
+      ? 'curve_axis_y_roommates_ops'
+      : 'curve_axis_y';
+    return t(key);
+  }
+
+  function curveMetricFromEngine(engine, roommatesMode = isRoommatesVariant(state.variant)) {
+    if (!engine) {
+      return 0;
+    }
+    if (!roommatesMode) {
+      return Number(engine.proposalCount || 0);
+    }
+    const proposals = Number(engine.proposalCount || 0);
+    const deletions = Number(engine.preferenceDeletionCount || 0);
+    const rotations = Number(engine.rotationCount || 0);
+    return proposals + deletions + rotations;
+  }
+
   function syncDefaultGroupInputs() {
     const defaults = getScenarioDefaultGroupKeys(state.variant);
     if (isRoommatesVariant(state.variant)) {
@@ -423,8 +454,14 @@
       els.editorRightTitle.textContent = t('editor_title_generic', { group });
       els.singleLeftLabel.textContent = t('counter_single_generic', { group });
       els.singleRightLabel.textContent = t('counter_single_generic', { group });
+      els.proposalLabel.textContent = t('counter_room_proposals');
+      els.engagedLabel.textContent = t('counter_engaged');
       els.graphTitle.textContent = t('graph_title_roommates');
       els.codeTitle.textContent = t('code_title_roommates');
+      els.curveAlgoTitle.textContent = t('curve_algo_title_irving');
+      els.curveChartTitle.textContent = t('curve_chart_title_roommates_ops');
+      els.curveTableTitle.textContent = t('curve_table_title_roommates_ops');
+      els.curveChartSvg.setAttribute('aria-label', t('curve_chart_title_roommates_ops'));
       return;
     }
 
@@ -438,10 +475,16 @@
     els.editorRightTitle.textContent = t('editor_title_generic', { group: state.groupNames.women });
     els.singleLeftLabel.textContent = t('counter_single_generic', { group: state.groupNames.men });
     els.singleRightLabel.textContent = t('counter_single_generic', { group: state.groupNames.women });
+    els.proposalLabel.textContent = t('counter_proposals');
+    els.engagedLabel.textContent = t('counter_engaged');
     els.proposerMenOption.textContent = t('proposer_generic', { group: state.groupNames.men });
     els.proposerWomenOption.textContent = t('proposer_generic', { group: state.groupNames.women });
     els.graphTitle.textContent = t('graph_title');
     els.codeTitle.textContent = t('code_title');
+    els.curveAlgoTitle.textContent = t('curve_algo_title_gs');
+    els.curveChartTitle.textContent = t('curve_chart_title');
+    els.curveTableTitle.textContent = t('curve_table_title');
+    els.curveChartSvg.setAttribute('aria-label', t('curve_chart_title'));
   }
 
   function updatePrefLayoutToggle() {
@@ -693,8 +736,8 @@
       },
       roommates: {
         room_wiki: 'preset_note_roommates_wiki',
+        room_joy_yeh: 'preset_note_roommates_joy_yeh',
         room_wiki_no_solution: 'preset_note_roommates_wiki_no_solution',
-        room_transcript_no_solution: 'preset_note_roommates_transcript_no_solution',
         random: 'preset_note_roommates_random',
         inverse: 'preset_note_roommates_inverse',
         easy: 'preset_note_roommates_easy',
@@ -722,7 +765,7 @@
     const allowed = variant === 'classic'
       ? new Set(['hpl_spl', 'numberphile_pride', 'worst_case_demo', 'random', 'inverse', 'easy'])
       : variant === 'roommates'
-        ? new Set(['room_wiki', 'room_wiki_no_solution', 'room_transcript_no_solution', 'random', 'inverse', 'easy', 'worst_case_demo'])
+        ? new Set(['room_wiki', 'room_joy_yeh', 'room_wiki_no_solution', 'random', 'inverse', 'easy', 'worst_case_demo'])
         : (variant === 'good_bad' || variant === 'forbidden')
           ? new Set(['hpl_spl', 'numberphile_pride', 'worst_case_demo', 'random', 'inverse', 'easy'])
           : new Set(['worst_case_demo', 'random', 'inverse', 'easy']);
@@ -776,6 +819,9 @@
     els.editorRightBox.classList.toggle('hidden', roommates);
     els.addWomanRowBtn.classList.toggle('hidden', roommates);
     els.singleRightCard.classList.toggle('hidden', roommates);
+    els.roomDeletionCard.classList.toggle('hidden', !roommates);
+    els.roomRotationCard.classList.toggle('hidden', !roommates);
+    els.roomOpsCard.classList.toggle('hidden', !roommates);
     els.pairsLabel.textContent = roommates ? t('participants_label') : t('pairs_label');
 
     els.menEditorTableEl.classList.toggle('hide-cap-col', roommates || !showCapMen);
@@ -1256,11 +1302,11 @@
       if (preset === 'room_wiki') {
         return GSAlgorithms.roommatesPresets.wikipedia();
       }
+      if (preset === 'room_joy_yeh') {
+        return GSAlgorithms.roommatesPresets.joyYeh();
+      }
       if (preset === 'room_wiki_no_solution') {
         return GSAlgorithms.roommatesPresets.wikipediaNoSolution();
-      }
-      if (preset === 'room_transcript_no_solution') {
-        return GSAlgorithms.roommatesPresets.transcriptNoSolution();
       }
       if (preset === 'worst_case_demo') {
         return GSAlgorithms.roommatesPresets.worstCase(n);
@@ -1334,6 +1380,17 @@
     return instance;
   }
 
+  function loadFromControls(statusKey = 'status_loaded') {
+    try {
+      const instance = buildInstanceFromControls();
+      loadInstance(instance, statusKey);
+      return true;
+    } catch (error) {
+      setStatus('status_invalid');
+      return false;
+    }
+  }
+
   function generateTraits(instance) {
     const all = instance && instance.problemType === 'roommates'
       ? instance.people.slice()
@@ -1370,7 +1427,7 @@
     let initialLogKey = 'step_initial';
     if (state.instance && state.instance.problemType === 'roommates') {
       initialLogKey = 'step_initial_roommates';
-    } else if (state.variant === 'classic' && state.preset === 'numberphile_pride') {
+    } else if (state.preset === 'numberphile_pride') {
       initialLogKey = 'step_initial_numberphile_pride';
     }
     state.logEntries = [t(initialLogKey)];
@@ -1496,17 +1553,18 @@
         step_room_replace: 16,
         step_room_reject: 18,
         step_room_exhausted: 8,
-        step_room_trim_delete: 21,
-        step_room_rotation_found: 23,
-        step_room_rotation_reject: 24,
-        step_room_rotation_trim: 25,
-        step_room_finished_stable: 27,
-        step_room_finished_no_solution: 26
+        step_room_finished_mutual_top: 20,
+        step_room_trim_delete: 23,
+        step_room_rotation_found: 25,
+        step_room_rotation_reject: 26,
+        step_room_rotation_trim: 27,
+        step_room_finished_stable: 29,
+        step_room_finished_no_solution: 28
       };
       if (event.key && Object.prototype.hasOwnProperty.call(lineMap, event.key)) {
         return lineMap[event.key];
       }
-      if (Number.isFinite(event.line) && event.line >= 1 && event.line <= 27) {
+      if (Number.isFinite(event.line) && event.line >= 1 && event.line <= 29) {
         return event.line;
       }
       return 1;
@@ -1667,8 +1725,14 @@
       const matchedPairs = Array.isArray(snapshot.pairs) ? snapshot.pairs.length : 0;
       const matchedPeople = matchedPairs * 2;
       const singles = Math.max(0, n - matchedPeople);
+      const deletions = Number(snapshot.preferenceDeletionCount || 0);
+      const rotations = Number(snapshot.rotationCount || 0);
+      const irvingOps = Number(snapshot.irvingOperationCount || ((snapshot.proposalCount || 0) + deletions + rotations));
 
       els.proposalCount.textContent = String(snapshot.proposalCount || 0);
+      els.roomDeletionCount.textContent = String(deletions);
+      els.roomRotationCount.textContent = String(rotations);
+      els.roomOpsCount.textContent = String(irvingOps);
       els.engagedCount.textContent = String(matchedPairs);
       els.singleMenCount.textContent = String(singles);
       els.singleWomenCount.textContent = '0';
@@ -1688,6 +1752,9 @@
     }
 
     els.proposalCount.textContent = String(snapshot.proposalCount);
+    els.roomDeletionCount.textContent = '0';
+    els.roomRotationCount.textContent = '0';
+    els.roomOpsCount.textContent = '0';
     els.engagedCount.textContent = String(snapshot.pairs.length);
     els.singleMenCount.textContent = String(Math.max(0, state.instance.men.length - menMatched.size));
     els.singleWomenCount.textContent = String(Math.max(0, state.instance.women.length - womenMatched.size));
@@ -1719,15 +1786,17 @@
         '16             hold[q] = p; delete (p_prime, q); free.append(p_prime)',
         '17         else:',
         '18             delete (p, q); free.append(p)',
-        '19 for each q in P:',
-        '20     p = hold[q]',
-        '21     delete every successor of p on q list (symmetrically)',
-        '22 while exists p with list size > 1:',
-        '23     find rotation r = (x0,y0),...,(xk-1,yk-1)',
-        '24     for each i: yi rejects xi',
-        '25     for each i: delete successors of x(i-1) on yi list',
-        '26     if any list becomes empty: return NO_STABLE_MATCHING',
-        '27 return singleton pairs from reduced table'
+        '19 if all hold relations are mutual top-choice pairs:',
+        '20     return those pairs (skip Phase 1 reduction)',
+        '21 for each q in P:',
+        '22     p = hold[q]',
+        '23     delete every successor of p on q list (symmetrically)',
+        '24 while exists p with list size > 1:',
+        '25     find rotation r = (x0,y0),...,(xk-1,yk-1)',
+        '26     for each i: yi rejects xi',
+        '27     for each i: delete successors of x(i-1) on yi list',
+        '28     if any list becomes empty: return NO_STABLE_MATCHING',
+        '29 return singleton pairs from reduced table'
       ];
     }
 
@@ -2214,7 +2283,7 @@
     }).join('');
 
     return `
-      <table class="pref-table pref-table-matrix">
+      <table class="pref-table pref-table-matrix roommates-pref-table">
         <thead>
           <tr>
             <th>${escapeHtml(state.groupNames.roommates)}</th>
@@ -3031,10 +3100,11 @@
     }
 
     els.curveTooltip.hidden = false;
+    const yLabel = curveYAxisLabelText();
     els.curveTooltip.innerHTML = `
       <strong>${escapeHtml(tip.label)}</strong><br>
       n=${escapeHtml(String(tip.n))}<br>
-      ${escapeHtml(t('curve_axis_y'))}: ${escapeHtml(Number(tip.value).toFixed(2))}
+      ${escapeHtml(yLabel)}: ${escapeHtml(Number(tip.value).toFixed(2))}
     `;
 
     els.curveTooltip.style.left = `${tip.x}px`;
@@ -3104,7 +3174,7 @@
       <line class="curve-axis" x1="${margin.left}" y1="${margin.top + chartH}" x2="${margin.left + chartW}" y2="${margin.top + chartH}"></line>
       <line class="curve-axis" x1="${margin.left}" y1="${margin.top}" x2="${margin.left}" y2="${margin.top + chartH}"></line>
       <text class="curve-label" x="${margin.left + chartW / 2}" y="${height - 8}" text-anchor="middle">${escapeHtml(t(isRoommatesVariant(state.variant) ? 'curve_axis_x_roommates' : 'curve_axis_x'))}</text>
-      <text class="curve-label" x="16" y="${margin.top + chartH / 2}" text-anchor="middle" transform="rotate(-90 16 ${margin.top + chartH / 2})">${escapeHtml(t('curve_axis_y'))}</text>
+      <text class="curve-label" x="16" y="${margin.top + chartH / 2}" text-anchor="middle" transform="rotate(-90 16 ${margin.top + chartH / 2})">${escapeHtml(curveYAxisLabelText())}</text>
     `;
 
     const curves = [];
@@ -3304,9 +3374,9 @@
       eEasy.runToEnd();
       eWorst.runToEnd();
 
-      const inverseValue = eInverse.proposalCount;
-      const easyValue = eEasy.proposalCount;
-      const worstValue = eWorst.proposalCount;
+      const inverseValue = curveMetricFromEngine(eInverse, roommates);
+      const easyValue = curveMetricFromEngine(eEasy, roommates);
+      const worstValue = curveMetricFromEngine(eWorst, roommates);
 
       for (let r = 0; r < repeats; r += 1) {
         const seed = (n * 10007) + (r * 97) + i;
@@ -3319,7 +3389,7 @@
 
         eRandom.runToEnd();
 
-        sumRandom += eRandom.proposalCount;
+        sumRandom += curveMetricFromEngine(eRandom, roommates);
       }
 
       state.curves.rows.push({
@@ -3511,13 +3581,14 @@
       updateVariantFieldsVisibility();
       updateScenarioPresetNotes();
       updateDynamicLabels();
-      renderAll();
+      loadFromControls('status_loaded');
     });
 
     els.presetSelect.addEventListener('change', () => {
       state.preset = els.presetSelect.value;
       updateVariantFieldsVisibility();
       updateScenarioPresetNotes();
+      loadFromControls('status_loaded');
     });
 
     els.pairsInput.addEventListener('input', () => {
@@ -3585,12 +3656,7 @@
     });
 
     els.loadPresetBtn.addEventListener('click', () => {
-      try {
-        const instance = buildInstanceFromControls();
-        loadInstance(instance, 'status_loaded');
-      } catch (error) {
-        setStatus('status_invalid');
-      }
+      loadFromControls('status_loaded');
     });
 
     els.resetRunBtn.addEventListener('click', () => {
