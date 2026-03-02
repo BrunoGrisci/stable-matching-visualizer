@@ -52,11 +52,11 @@ Ferramenta web interativa para estudar o algoritmo de Gale-Shapley (Problema do 
 
 ## Arquivos Principais
 
-- `galeshapley.html`
-- `galeshapley/css/style.css`
-- `galeshapley/js/i18n.js`
-- `galeshapley/js/algorithms.js`
-- `galeshapley/js/main.js`
+- `stablematching.html`
+- `stablematching/css/style.css`
+- `stablematching/js/i18n.js`
+- `stablematching/js/algorithms.js`
+- `stablematching/js/main.js`
 
 ## Como Executar Localmente
 
@@ -68,7 +68,7 @@ python3 -m http.server 4173
 
 Depois abra:
 
-- `http://127.0.0.1:4173/galeshapley.html`
+- `http://127.0.0.1:4173/stablematching.html`
 
 ## Formato CSV
 

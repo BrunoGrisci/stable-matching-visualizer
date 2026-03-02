@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Outfit:wght@300;400;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="galeshapley/css/style.css">
+  <link rel="stylesheet" href="stablematching/css/style.css">
 </head>
 <body class="theme-light" data-lang="en">
   <header>
@@ -35,16 +35,21 @@
           <option value="good_bad" data-i18n="variant_good_bad">Good and Bad Categories</option>
           <option value="forbidden" data-i18n="variant_forbidden">Forbidden Pairs</option>
           <option value="capacity" data-i18n="variant_capacity">Resident Matching</option>
+          <option value="roommates" data-i18n="variant_roommates">Stable Roommates</option>
         </select>
         <p id="scenarioNote" class="field-note"></p>
 
-        <label for="presetSelect" data-i18n="preset_label">Instance preset</label>
+        <label id="presetLabel" for="presetSelect" data-i18n="preset_label">Instance preset</label>
         <select id="presetSelect">
           <option value="hpl_spl" data-i18n="preset_hpl">HPL/SPL Demo</option>
+          <option value="numberphile_pride" data-i18n="preset_numberphile_pride">Numberphile / Pride and Prejudice</option>
           <option value="worst_case_demo" data-i18n="preset_worst_case_demo">Worst case</option>
           <option value="random" data-i18n="preset_random">Random</option>
           <option value="inverse" data-i18n="preset_inverse">Inverse</option>
           <option value="easy" data-i18n="preset_easy">Easy</option>
+          <option value="room_wiki" data-i18n="preset_room_wiki" hidden>Wikipedia (6 participants)</option>
+          <option value="room_wiki_no_solution" data-i18n="preset_room_wiki_no_solution" hidden>Wikipedia no solution</option>
+          <option value="room_transcript_no_solution" data-i18n="preset_room_transcript_no_solution" hidden>Transcript no solution</option>
         </select>
         <p id="presetNote" class="field-note"></p>
 
@@ -54,7 +59,7 @@
         </div>
 
         <div id="pairsField" class="field-slot">
-          <label for="pairsInput" data-i18n="pairs_label">Number of pairs (n)</label>
+          <label id="pairsLabel" for="pairsInput" data-i18n="pairs_label">Number of pairs (n)</label>
           <input id="pairsInput" type="number" min="2" max="2000" step="1" value="5" inputmode="numeric">
         </div>
 
@@ -116,17 +121,28 @@
           </div>
         </details>
 
-        <label for="proposerSelect" data-i18n="proposer_label">Proposer side</label>
-        <select id="proposerSelect">
-          <option id="proposerMenOption" value="men">Men propose</option>
-          <option id="proposerWomenOption" value="women">Women propose</option>
-        </select>
+        <div id="proposerField" class="field-slot">
+          <label for="proposerSelect" data-i18n="proposer_label">Proposer side</label>
+          <select id="proposerSelect">
+            <option id="proposerMenOption" value="men">Men propose</option>
+            <option id="proposerWomenOption" value="women">Women propose</option>
+          </select>
+        </div>
 
-        <label for="groupLeftInput" data-i18n="group_left_label">Left group name</label>
-        <input id="groupLeftInput" type="text" value="Men">
+        <div id="groupLeftField" class="field-slot">
+          <label for="groupLeftInput" data-i18n="group_left_label">Left group name</label>
+          <input id="groupLeftInput" type="text" value="Men">
+        </div>
 
-        <label for="groupRightInput" data-i18n="group_right_label">Right group name</label>
-        <input id="groupRightInput" type="text" value="Women">
+        <div id="groupRightField" class="field-slot">
+          <label for="groupRightInput" data-i18n="group_right_label">Right group name</label>
+          <input id="groupRightInput" type="text" value="Women">
+        </div>
+
+        <div id="groupSingleField" class="field-slot hidden">
+          <label for="groupSingleInput" data-i18n="group_single_label">Group name</label>
+          <input id="groupSingleInput" type="text" value="Roommates">
+        </div>
       </div>
 
       <div class="row-btns">
@@ -195,7 +211,7 @@
                   <h3 id="menPrefTitle" data-i18n="men_pref_title">Men preferences</h3>
                   <div id="menPrefTable" class="pref-table-wrap"></div>
                 </article>
-                <article class="pref-box">
+                <article id="womenPrefBox" class="pref-box">
                   <h3 id="womenPrefTitle" data-i18n="women_pref_title">Women preferences</h3>
                   <div id="womenPrefTable" class="pref-table-wrap"></div>
                 </article>
@@ -209,7 +225,7 @@
 
             <article class="graph-box">
               <div class="graph-head">
-                <h3 data-i18n="graph_title">Bipartite graph</h3>
+                <h3 id="graphTitle" data-i18n="graph_title">Bipartite graph</h3>
                 <span id="graphModeTag" class="chip"></span>
               </div>
               <div id="graphArea" class="graph-area">
@@ -227,7 +243,7 @@
 
           <section class="code-column" id="codeColumn">
             <button id="toggleCodeBtn" class="icon-btn panel-toggle-btn" data-i18n-title="toggle_code_hide" aria-label="Collapse algorithm panel">📜-</button>
-            <h3 data-i18n="code_title">Gale-Shapley Algorithm code</h3>
+            <h3 id="codeTitle" data-i18n="code_title">Gale-Shapley Algorithm code</h3>
             <div id="codeDisplay" class="code-display"></div>
 
             <h3 data-i18n="ds_title">Data structures</h3>
@@ -255,7 +271,7 @@
             </table>
           </article>
 
-          <article class="editor-box">
+          <article id="editorRightBox" class="editor-box">
             <div class="editor-head">
               <h3 id="editorRightTitle" data-i18n="editor_women_title">Editable women table</h3>
               <button id="addWomanRowBtn" class="secondary" data-i18n="add_row_btn">Add row</button>
@@ -383,10 +399,12 @@
         <ol>
           <li><em>Algorithm Design</em>, Jon Kleinberg and Éva Tardos.</li>
           <li><a href="https://www.cs.princeton.edu/~wayne/kleinberg-tardos/pdf/01DemoGaleShapley.pdf" target="_blank" rel="noopener noreferrer">Princeton demo: Gale-Shapley</a>.</li>
-          <li><a href="https://github.com/BrunoGrisci/stable-matching-visualizer" target="_blank" rel="noopener noreferrer">Project repository</a>.</li>
+          <li><a href="https://www.youtube.com/watch?v=Qcv1IqHWAzg" target="_blank" rel="noopener noreferrer">Stable Marriage Problem - Numberphile</a>.</li>
+          <li><a href="https://www.youtube.com/watch?v=LtTV6rIxhdo" target="_blank" rel="noopener noreferrer">Stable Marriage Problem (the math bit)</a>.</li>
           <li>Irving, Robert W. (1985). &quot;An efficient algorithm for the &quot;stable roommates&quot; problem&quot;. <em>Journal of Algorithms</em>. 6 (4): 577-595. <a href="https://doi.org/10.1016/0196-6774(85)90033-1" target="_blank" rel="noopener noreferrer">doi:10.1016/0196-6774(85)90033-1</a>.</li>
           <li><a href="https://en.wikipedia.org/wiki/Stable_roommates_problem" target="_blank" rel="noopener noreferrer">Stable roommates problem</a>.</li>
           <li><a href="https://www.youtube.com/watch?v=5QLxAp8mRKo" target="_blank" rel="noopener noreferrer">Irving's Algorithm and Stable Roommates Problem</a>.</li>
+          <li><a href="https://github.com/BrunoGrisci/stable-matching-visualizer" target="_blank" rel="noopener noreferrer">Project repository</a>.</li>
         </ol>
         <p><strong data-i18n="see_more_algorithms">See more algorithms</strong></p>
         <p><a href="https://github.com/BrunoGrisci/projeto-e-analise-de-algoritmos" target="_blank" rel="noopener noreferrer">https://github.com/BrunoGrisci/projeto-e-analise-de-algoritmos</a></p>
@@ -418,8 +436,8 @@
     <p data-i18n="footer_ai">Developed with assistance from GPT-5.3-Codex.</p>
   </footer>
 
-  <script src="galeshapley/js/i18n.js"></script>
-  <script src="galeshapley/js/algorithms.js"></script>
-  <script src="galeshapley/js/main.js"></script>
+  <script src="stablematching/js/i18n.js"></script>
+  <script src="stablematching/js/algorithms.js"></script>
+  <script src="stablematching/js/main.js"></script>
 </body>
 </html>

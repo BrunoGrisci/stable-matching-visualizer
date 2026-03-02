@@ -9,7 +9,8 @@
     preset: 'hpl_spl',
     groupNames: {
       men: 'Men',
-      women: 'Women'
+      women: 'Women',
+      roommates: 'Roommates'
     },
     instance: null,
     engine: null,
@@ -83,14 +84,24 @@
 
     variantSelect: document.getElementById('variantSelect'),
     presetSelect: document.getElementById('presetSelect'),
+    presetLabel: document.getElementById('presetLabel'),
     presetHplOption: document.querySelector('#presetSelect option[value="hpl_spl"]'),
+    presetRoomWikiOption: document.querySelector('#presetSelect option[value="room_wiki"]'),
+    presetRoomWikiNoSolutionOption: document.querySelector('#presetSelect option[value="room_wiki_no_solution"]'),
+    presetRoomTranscriptNoSolutionOption: document.querySelector('#presetSelect option[value="room_transcript_no_solution"]'),
+    pairsLabel: document.getElementById('pairsLabel'),
     pairsInput: document.getElementById('pairsInput'),
     goodCountInput: document.getElementById('goodCountInput'),
     proposerSelect: document.getElementById('proposerSelect'),
     proposerMenOption: document.getElementById('proposerMenOption'),
     proposerWomenOption: document.getElementById('proposerWomenOption'),
+    proposerField: document.getElementById('proposerField'),
     groupLeftInput: document.getElementById('groupLeftInput'),
     groupRightInput: document.getElementById('groupRightInput'),
+    groupSingleInput: document.getElementById('groupSingleInput'),
+    groupLeftField: document.getElementById('groupLeftField'),
+    groupRightField: document.getElementById('groupRightField'),
+    groupSingleField: document.getElementById('groupSingleField'),
     forbiddenCountInput: document.getElementById('forbiddenCountInput'),
     residentCountInput: document.getElementById('residentCountInput'),
     positionsCountInput: document.getElementById('positionsCountInput'),
@@ -132,17 +143,22 @@
     singleWomenCount: document.getElementById('singleWomenCount'),
     singleLeftLabel: document.getElementById('singleLeftLabel'),
     singleRightLabel: document.getElementById('singleRightLabel'),
+    singleLeftCard: document.getElementById('singleLeftLabel').closest('.counter-item'),
+    singleRightCard: document.getElementById('singleRightLabel').closest('.counter-item'),
 
     menPrefTitle: document.getElementById('menPrefTitle'),
     womenPrefTitle: document.getElementById('womenPrefTitle'),
+    womenPrefBox: document.getElementById('womenPrefBox'),
     prefPair: document.getElementById('prefPair'),
     prefLayoutToggleBtn: document.getElementById('prefLayoutToggleBtn'),
     menPrefTable: document.getElementById('menPrefTable'),
     womenPrefTable: document.getElementById('womenPrefTable'),
+    graphTitle: document.getElementById('graphTitle'),
     graphModeTag: document.getElementById('graphModeTag'),
     matchGraph: document.getElementById('matchGraph'),
     insightsGrid: document.getElementById('insightsGrid'),
 
+    codeTitle: document.getElementById('codeTitle'),
     codeDisplay: document.getElementById('codeDisplay'),
     dsDisplay: document.getElementById('dsDisplay'),
     stepLog: document.getElementById('stepLog'),
@@ -155,6 +171,7 @@
     addWomanRowBtn: document.getElementById('addWomanRowBtn'),
     editorLeftTitle: document.getElementById('editorLeftTitle'),
     editorRightTitle: document.getElementById('editorRightTitle'),
+    editorRightBox: document.getElementById('editorRightBox'),
 
     tabSimBtn: document.getElementById('tabSimBtn'),
     tabCurvesBtn: document.getElementById('tabCurvesBtn'),
@@ -313,7 +330,16 @@
     document.documentElement.style.setProperty(name, `${Math.round(value)}px`);
   }
 
+  function isRoommatesVariant(variant = state.variant) {
+    return variant === 'roommates';
+  }
+
   function getScenarioDefaultGroupKeys(variant = state.variant) {
+    if (isRoommatesVariant(variant)) {
+      return {
+        single: 'side_roommates'
+      };
+    }
     if (variant === 'capacity') {
       return {
         left: 'side_hospitals',
@@ -328,6 +354,13 @@
 
   function syncDefaultGroupInputs() {
     const defaults = getScenarioDefaultGroupKeys(state.variant);
+    if (isRoommatesVariant(state.variant)) {
+      if (!els.groupSingleInput.value.trim() || els.groupSingleInput.dataset.default === '1') {
+        els.groupSingleInput.value = t(defaults.single);
+        els.groupSingleInput.dataset.default = '1';
+      }
+      return;
+    }
     if (!els.groupLeftInput.value.trim() || els.groupLeftInput.dataset.default === '1') {
       els.groupLeftInput.value = t(defaults.left);
       els.groupLeftInput.dataset.default = '1';
@@ -362,6 +395,7 @@
     syncDefaultGroupInputs();
 
     updateToggleButtons();
+    updateVariantFieldsVisibility();
     updateScenarioPresetNotes();
     updateDynamicLabels();
     updatePrefLayoutToggle();
@@ -377,25 +411,51 @@
 
   function updateDynamicLabels() {
     const defaults = getScenarioDefaultGroupKeys(state.variant);
+    if (isRoommatesVariant(state.variant)) {
+      const group = String(els.groupSingleInput.value || '').trim() || t(defaults.single);
+      state.groupNames.roommates = group;
+      state.groupNames.men = group;
+      state.groupNames.women = group;
+
+      els.menPrefTitle.textContent = t('pref_title_generic', { group });
+      els.womenPrefTitle.textContent = t('pref_title_generic', { group });
+      els.editorLeftTitle.textContent = t('editor_title_generic', { group });
+      els.editorRightTitle.textContent = t('editor_title_generic', { group });
+      els.singleLeftLabel.textContent = t('counter_single_generic', { group });
+      els.singleRightLabel.textContent = t('counter_single_generic', { group });
+      els.graphTitle.textContent = t('graph_title_roommates');
+      els.codeTitle.textContent = t('code_title_roommates');
+      return;
+    }
+
     state.groupNames.men = String(els.groupLeftInput.value || '').trim() || t(defaults.left);
     state.groupNames.women = String(els.groupRightInput.value || '').trim() || t(defaults.right);
+    state.groupNames.roommates = t('side_roommates');
 
     els.menPrefTitle.textContent = t('pref_title_generic', { group: state.groupNames.men });
     els.womenPrefTitle.textContent = t('pref_title_generic', { group: state.groupNames.women });
     els.editorLeftTitle.textContent = t('editor_title_generic', { group: state.groupNames.men });
     els.editorRightTitle.textContent = t('editor_title_generic', { group: state.groupNames.women });
-
     els.singleLeftLabel.textContent = t('counter_single_generic', { group: state.groupNames.men });
     els.singleRightLabel.textContent = t('counter_single_generic', { group: state.groupNames.women });
-
     els.proposerMenOption.textContent = t('proposer_generic', { group: state.groupNames.men });
     els.proposerWomenOption.textContent = t('proposer_generic', { group: state.groupNames.women });
+    els.graphTitle.textContent = t('graph_title');
+    els.codeTitle.textContent = t('code_title');
   }
 
   function updatePrefLayoutToggle() {
     if (!els.prefPair || !els.prefLayoutToggleBtn) {
       return;
     }
+
+    if (isRoommatesVariant(state.variant)) {
+      els.prefLayoutToggleBtn.classList.add('hidden');
+      els.prefPair.classList.remove('stacked');
+      return;
+    }
+
+    els.prefLayoutToggleBtn.classList.remove('hidden');
 
     els.prefPair.classList.toggle('stacked', state.prefTablesStacked);
     const labelKey = state.prefTablesStacked
@@ -596,24 +656,30 @@
       classic: 'scenario_note_classic',
       good_bad: 'scenario_note_good_bad',
       forbidden: 'scenario_note_forbidden',
-      capacity: 'scenario_note_capacity'
+      capacity: 'scenario_note_capacity',
+      roommates: 'scenario_note_roommates'
     };
 
     const presetScenarioKeyMap = {
       classic: {
         hpl_spl: 'preset_note_classic_hpl',
+        numberphile_pride: 'preset_note_classic_numberphile_pride',
         worst_case_demo: 'preset_note_classic_worst_case',
         random: 'preset_note_classic_random',
         inverse: 'preset_note_classic_inverse',
         easy: 'preset_note_classic_easy'
       },
       good_bad: {
+        hpl_spl: 'preset_note_good_bad_hpl',
+        numberphile_pride: 'preset_note_good_bad_numberphile_pride',
         worst_case_demo: 'preset_note_good_bad_worst_case',
         random: 'preset_note_good_bad_random',
         inverse: 'preset_note_good_bad_inverse',
         easy: 'preset_note_good_bad_easy'
       },
       forbidden: {
+        hpl_spl: 'preset_note_forbidden_hpl',
+        numberphile_pride: 'preset_note_forbidden_numberphile_pride',
         worst_case_demo: 'preset_note_forbidden_worst_case',
         random: 'preset_note_forbidden_random',
         inverse: 'preset_note_forbidden_inverse',
@@ -624,10 +690,20 @@
         random: 'preset_note_capacity_random',
         inverse: 'preset_note_capacity_inverse',
         easy: 'preset_note_capacity_easy'
+      },
+      roommates: {
+        room_wiki: 'preset_note_roommates_wiki',
+        room_wiki_no_solution: 'preset_note_roommates_wiki_no_solution',
+        room_transcript_no_solution: 'preset_note_roommates_transcript_no_solution',
+        random: 'preset_note_roommates_random',
+        inverse: 'preset_note_roommates_inverse',
+        easy: 'preset_note_roommates_easy',
+        worst_case_demo: 'preset_note_roommates_worst_case'
       }
     };
     const fallbackPresetKeyMap = {
       hpl_spl: 'preset_note_hpl',
+      numberphile_pride: 'preset_note_numberphile_pride',
       worst_case_demo: 'preset_note_worst_case',
       random: 'preset_note_random',
       inverse: 'preset_note_inverse',
@@ -643,17 +719,25 @@
 
   function updatePresetAvailability() {
     const variant = els.variantSelect.value;
-    const allowHpl = variant === 'classic';
+    const allowed = variant === 'classic'
+      ? new Set(['hpl_spl', 'numberphile_pride', 'worst_case_demo', 'random', 'inverse', 'easy'])
+      : variant === 'roommates'
+        ? new Set(['room_wiki', 'room_wiki_no_solution', 'room_transcript_no_solution', 'random', 'inverse', 'easy', 'worst_case_demo'])
+        : (variant === 'good_bad' || variant === 'forbidden')
+          ? new Set(['hpl_spl', 'numberphile_pride', 'worst_case_demo', 'random', 'inverse', 'easy'])
+          : new Set(['worst_case_demo', 'random', 'inverse', 'easy']);
 
-    if (els.presetHplOption) {
-      els.presetHplOption.hidden = !allowHpl;
-      els.presetHplOption.disabled = !allowHpl;
+    const options = Array.from(els.presetSelect.options);
+    for (const opt of options) {
+      const ok = allowed.has(opt.value);
+      opt.hidden = !ok;
+      opt.disabled = !ok;
     }
 
-    if (!allowHpl && els.presetSelect.value === 'hpl_spl') {
-      els.presetSelect.value = 'random';
+    if (!allowed.has(els.presetSelect.value)) {
+      const first = options.find((opt) => !opt.disabled);
+      els.presetSelect.value = first ? first.value : 'random';
     }
-
     state.preset = els.presetSelect.value;
   }
 
@@ -663,8 +747,11 @@
     const preset = els.presetSelect.value;
     const n = readNumberInput(els.pairsInput, 5, 2, 2000);
 
-    const usesN = variant !== 'capacity'
-      && (variant === 'good_bad' || preset === 'random' || preset === 'inverse' || preset === 'easy' || preset === 'worst_case_demo');
+    const nDrivenPresets = new Set(['random', 'inverse', 'easy', 'worst_case_demo']);
+    const roommates = isRoommatesVariant(variant);
+    const usesN = roommates
+      ? nDrivenPresets.has(preset)
+      : (variant !== 'capacity' && nDrivenPresets.has(preset));
     const showCapMen = variant === 'capacity';
     const showCapWomen = false;
     const showCategory = variant === 'good_bad';
@@ -678,15 +765,26 @@
     els.hospitalCountField.classList.toggle('hidden', !showResidentParams);
     els.hospitalPosRangeField.classList.toggle('hidden', !showResidentParams);
     els.residentAppsRangeField.classList.toggle('hidden', !showResidentParams);
-    els.advancedDetails.hidden = variant === 'classic';
+    els.advancedDetails.hidden = variant === 'classic' || roommates;
 
-    els.menEditorTableEl.classList.toggle('hide-cap-col', !showCapMen);
+    els.proposerField.classList.toggle('hidden', roommates);
+    els.groupLeftField.classList.toggle('hidden', roommates);
+    els.groupRightField.classList.toggle('hidden', roommates);
+    els.groupSingleField.classList.toggle('hidden', !roommates);
+    els.womenPrefBox.classList.toggle('hidden', roommates);
+    els.prefPair.classList.toggle('roommates-single', roommates);
+    els.editorRightBox.classList.toggle('hidden', roommates);
+    els.addWomanRowBtn.classList.toggle('hidden', roommates);
+    els.singleRightCard.classList.toggle('hidden', roommates);
+    els.pairsLabel.textContent = roommates ? t('participants_label') : t('pairs_label');
+
+    els.menEditorTableEl.classList.toggle('hide-cap-col', roommates || !showCapMen);
     els.womenEditorTableEl.classList.toggle('hide-cap-col', !showCapWomen);
-    els.menEditorTableEl.classList.toggle('hide-cat-col', !showCategory);
+    els.menEditorTableEl.classList.toggle('hide-cat-col', roommates || !showCategory);
     els.womenEditorTableEl.classList.toggle('hide-cat-col', !showCategory);
     if (variant === 'capacity') {
       syncResidentMatchingBounds();
-    } else {
+    } else if (!roommates) {
       syncForbiddenCountBounds(n * n);
     }
   }
@@ -721,6 +819,57 @@
     }
 
     return { menPartners, womenPartners };
+  }
+
+  function buildRoommatesLiveLinks(snapshot) {
+    const names = Array.isArray(snapshot && snapshot.names) ? snapshot.names : [];
+    const partnerLists = Object.fromEntries(names.map((name) => [name, []]));
+    const liveEdges = [];
+    const liveEdgeKeys = new Set();
+
+    const addLiveEdge = (a, b) => {
+      if (!a || !b || a === b) {
+        return;
+      }
+      const key = a < b ? `${a}|${b}` : `${b}|${a}`;
+      if (liveEdgeKeys.has(key)) {
+        return;
+      }
+      liveEdgeKeys.add(key);
+      liveEdges.push({ a, b, key });
+      if (!partnerLists[a]) {
+        partnerLists[a] = [];
+      }
+      if (!partnerLists[b]) {
+        partnerLists[b] = [];
+      }
+      if (!partnerLists[a].includes(b)) {
+        partnerLists[a].push(b);
+      }
+      if (!partnerLists[b].includes(a)) {
+        partnerLists[b].push(a);
+      }
+    };
+
+    const inPhase1 = String(snapshot && snapshot.phase ? snapshot.phase : '').startsWith('phase1');
+    if (inPhase1) {
+      for (const name of names) {
+        const holder = snapshot && snapshot.hold && snapshot.hold[name] ? snapshot.hold[name] : null;
+        if (holder) {
+          addLiveEdge(holder, name);
+        }
+      }
+    } else {
+      for (const pair of (snapshot && snapshot.pairs) || []) {
+        addLiveEdge(pair.man, pair.woman);
+      }
+    }
+
+    return {
+      partnerLists,
+      liveEdges,
+      liveEdgeKeys
+    };
   }
 
   function rankValue(prefList, candidateList) {
@@ -956,16 +1105,24 @@
     const nameInput = document.createElement('input');
     nameInput.type = 'text';
     nameInput.value = rowData.name || '';
-    nameInput.placeholder = state.variant === 'capacity'
-      ? (side === 'men' ? 'H1' : 'R1')
-      : (side === 'men' ? 'M1' : 'W1');
+    if (isRoommatesVariant(state.variant)) {
+      nameInput.placeholder = 'P1';
+    } else {
+      nameInput.placeholder = state.variant === 'capacity'
+        ? (side === 'men' ? 'H1' : 'R1')
+        : (side === 'men' ? 'M1' : 'W1');
+    }
 
     const prefsInput = document.createElement('input');
     prefsInput.type = 'text';
     prefsInput.value = rowData.prefs || '';
-    prefsInput.placeholder = state.variant === 'capacity'
-      ? (side === 'men' ? 'R1, R2, R3' : 'H1, H2, H3')
-      : (side === 'men' ? 'W1, W2, W3' : 'M1, M2, M3');
+    if (isRoommatesVariant(state.variant)) {
+      prefsInput.placeholder = 'P2, P3, P4';
+    } else {
+      prefsInput.placeholder = state.variant === 'capacity'
+        ? (side === 'men' ? 'R1, R2, R3' : 'H1, H2, H3')
+        : (side === 'men' ? 'W1, W2, W3' : 'M1, M2, M3');
+    }
 
     const capInput = document.createElement('input');
     capInput.type = 'number';
@@ -1018,6 +1175,16 @@
   function fillEditors(instance) {
     els.menEditorTable.innerHTML = '';
     els.womenEditorTable.innerHTML = '';
+
+    if (instance && instance.problemType === 'roommates') {
+      for (const person of instance.people) {
+        els.menEditorTable.appendChild(createEditorRow('men', {
+          name: person,
+          prefs: (instance.prefs[person] || []).join(', ')
+        }));
+      }
+      return;
+    }
 
     for (const man of instance.men) {
       els.menEditorTable.appendChild(createEditorRow('men', {
@@ -1085,8 +1252,33 @@
     const preset = state.preset;
     const n = readNumberInput(els.pairsInput, 5, 2, 2000);
 
+    if (isRoommatesVariant(state.variant)) {
+      if (preset === 'room_wiki') {
+        return GSAlgorithms.roommatesPresets.wikipedia();
+      }
+      if (preset === 'room_wiki_no_solution') {
+        return GSAlgorithms.roommatesPresets.wikipediaNoSolution();
+      }
+      if (preset === 'room_transcript_no_solution') {
+        return GSAlgorithms.roommatesPresets.transcriptNoSolution();
+      }
+      if (preset === 'worst_case_demo') {
+        return GSAlgorithms.roommatesPresets.worstCase(n);
+      }
+      if (preset === 'inverse') {
+        return GSAlgorithms.roommatesPresets.inverse(n);
+      }
+      if (preset === 'easy') {
+        return GSAlgorithms.roommatesPresets.easy(n);
+      }
+      return GSAlgorithms.roommatesPresets.random(n, Date.now());
+    }
+
     if (preset === 'hpl_spl') {
       return GSAlgorithms.presets.hplSpl();
+    }
+    if (preset === 'numberphile_pride') {
+      return GSAlgorithms.presets.numberphilePride();
     }
     if (preset === 'worst_case_demo') {
       return GSAlgorithms.presets.worstCase(n);
@@ -1105,6 +1297,11 @@
     state.variant = els.variantSelect.value;
     state.preset = els.presetSelect.value;
     state.proposerSide = els.proposerSelect.value === 'women' ? 'women' : 'men';
+
+    if (isRoommatesVariant(state.variant)) {
+      state.proposerSide = 'men';
+      return getBasePresetInstance();
+    }
 
     if (state.variant === 'capacity') {
       const config = readResidentMatchingConfig();
@@ -1138,7 +1335,9 @@
   }
 
   function generateTraits(instance) {
-    const all = [...instance.men, ...instance.women];
+    const all = instance && instance.problemType === 'roommates'
+      ? instance.people.slice()
+      : [...instance.men, ...instance.women];
     const traits = {};
     for (const name of all) {
       const h = hashString(name);
@@ -1153,6 +1352,10 @@
   }
 
   function createEngine(instance, proposerSide = state.proposerSide) {
+    if (instance && instance.problemType === 'roommates') {
+      return new GSAlgorithms.IrvingEngine(instance);
+    }
+
     let options = {};
     if (state.variant === 'capacity') {
       const capacitySide = proposerSide === 'women' ? 'receiver' : 'proposer';
@@ -1164,7 +1367,13 @@
   function initializeEngine() {
     cancelOptimalityJob();
     state.engine = createEngine(state.instance, state.proposerSide);
-    state.logEntries = [t('step_initial')];
+    let initialLogKey = 'step_initial';
+    if (state.instance && state.instance.problemType === 'roommates') {
+      initialLogKey = 'step_initial_roommates';
+    } else if (state.variant === 'classic' && state.preset === 'numberphile_pride') {
+      initialLogKey = 'step_initial_numberphile_pride';
+    }
+    state.logEntries = [t(initialLogKey)];
     state.exhaustedProposers = new Set();
     state.recentlySingle = new Set();
     state.insightsCache = null;
@@ -1173,6 +1382,7 @@
   }
 
   function loadInstance(instance, statusKey = 'status_loaded') {
+    syncVariantWithInstance(instance);
     state.instance = GSAlgorithms.cloneInstance(instance);
     generateTraits(state.instance);
     fillEditors(state.instance);
@@ -1180,9 +1390,62 @@
     setStatus(statusKey);
   }
 
+  function syncVariantWithInstance(instance) {
+    const isRoom = instance && instance.problemType === 'roommates';
+    if (isRoom) {
+      state.variant = 'roommates';
+      els.variantSelect.value = 'roommates';
+      state.proposerSide = 'men';
+      els.proposerSelect.value = 'men';
+    } else if (state.variant === 'roommates') {
+      state.variant = 'classic';
+      els.variantSelect.value = 'classic';
+    }
+    syncDefaultGroupInputs();
+    updatePresetAvailability();
+    updateVariantFieldsVisibility();
+    updateScenarioPresetNotes();
+    updateDynamicLabels();
+  }
+
   function formatEventMessage(event) {
     if (!event || !event.key) {
       return '';
+    }
+
+    if (isRoommatesVariant(state.variant)) {
+      const params = {
+        proposer: event.proposer,
+        receiver: event.receiver,
+        displaced: event.displaced
+      };
+      if (event.key === 'step_room_accept') {
+        return [t('step_room_propose', params), t('step_room_accept', params)].join('\n');
+      }
+      if (event.key === 'step_room_replace') {
+        return [t('step_room_propose', params), t('step_room_replace', params)].join('\n');
+      }
+      if (event.key === 'step_room_reject') {
+        return [t('step_room_propose', params), t('step_room_reject', params)].join('\n');
+      }
+      if (event.key === 'step_room_rotation_found') {
+        return t(event.key, { rotation: event.rotation || '' });
+      }
+      if (event.key === 'step_room_trim_delete') {
+        return t(event.key, {
+          participant: event.participant,
+          removed: event.removed,
+          pivot: event.pivot
+        });
+      }
+      if (event.key === 'step_room_rotation_trim') {
+        return t(event.key, {
+          participant: event.participant,
+          removed: event.removed,
+          pivot: event.pivot
+        });
+      }
+      return t(event.key, params);
     }
 
     const params = {
@@ -1225,6 +1488,30 @@
       return 1;
     }
 
+    if (isRoommatesVariant(state.variant)) {
+      const lineMap = {
+        step_initial_roommates: 1,
+        step_room_propose: 10,
+        step_room_accept: 12,
+        step_room_replace: 16,
+        step_room_reject: 18,
+        step_room_exhausted: 8,
+        step_room_trim_delete: 21,
+        step_room_rotation_found: 23,
+        step_room_rotation_reject: 24,
+        step_room_rotation_trim: 25,
+        step_room_finished_stable: 27,
+        step_room_finished_no_solution: 26
+      };
+      if (event.key && Object.prototype.hasOwnProperty.call(lineMap, event.key)) {
+        return lineMap[event.key];
+      }
+      if (Number.isFinite(event.line) && event.line >= 1 && event.line <= 27) {
+        return event.line;
+      }
+      return 1;
+    }
+
     if (Number.isFinite(event.line) && event.line >= 1) {
       return event.line;
     }
@@ -1249,11 +1536,18 @@
     }
 
     state.recentlySingle = new Set();
-    if (event.type === 'replace' && event.displaced) {
+    if (isRoommatesVariant(state.variant)) {
+      if (event.displaced) {
+        state.recentlySingle.add(event.displaced);
+      }
+      if (event.key === 'step_room_rotation_reject' && event.proposer) {
+        state.recentlySingle.add(event.proposer);
+      }
+    } else if (event.type === 'replace' && event.displaced) {
       state.recentlySingle.add(event.displaced);
     }
 
-    if (event.type === 'exhausted' && event.proposer) {
+    if ((event.type === 'exhausted' || event.key === 'step_room_exhausted') && event.proposer) {
       state.exhaustedProposers.add(event.proposer);
     }
 
@@ -1268,10 +1562,10 @@
 
     if (event.type === 'finished') {
       stopAuto(false);
-      setStatus('status_finished');
       const doneSnapshot = state.engine.getSnapshot();
       state.insightsCache = GSAlgorithms.analyzeSnapshot(state.instance, state.proposerSide, doneSnapshot);
       startOptimalityEmpiricalComputation(doneSnapshot);
+      setStatus(doneSnapshot.hasStableMatching === false ? 'status_finished_no_solution' : 'status_finished');
     } else if (state.autoTimer) {
       setStatus('status_running');
     } else if (text) {
@@ -1291,17 +1585,27 @@
     const snapshot = state.engine.getSnapshot();
     state.recentlySingle = new Set();
 
-    for (const proposer of snapshot.orientation.proposers) {
-      const matches = Array.isArray(snapshot.proposerMatch[proposer]) ? snapshot.proposerMatch[proposer] : [];
-      if (matches.length === 0 && snapshot.nextIndex[proposer] >= (snapshot.orientation.pPrefs[proposer] || []).length) {
-        state.exhaustedProposers.add(proposer);
+    if (snapshot.problemType === 'roommates') {
+      for (const name of snapshot.names || []) {
+        const reduced = snapshot.reducedPrefs[name] || [];
+        if (!reduced.length) {
+          state.exhaustedProposers.add(name);
+        }
+      }
+    } else {
+      for (const proposer of snapshot.orientation.proposers) {
+        const matches = Array.isArray(snapshot.proposerMatch[proposer]) ? snapshot.proposerMatch[proposer] : [];
+        if (matches.length === 0 && snapshot.nextIndex[proposer] >= (snapshot.orientation.pPrefs[proposer] || []).length) {
+          state.exhaustedProposers.add(proposer);
+        }
       }
     }
 
-    state.logEntries.push(t('status_full'));
+    const finishKey = snapshot.hasStableMatching === false ? 'status_finished_no_solution' : 'status_full';
+    state.logEntries.push(t(finishKey));
     state.insightsCache = GSAlgorithms.analyzeSnapshot(state.instance, state.proposerSide, snapshot);
     startOptimalityEmpiricalComputation(snapshot);
-    setStatus('status_full');
+    setStatus(finishKey);
     renderAll();
   }
 
@@ -1357,6 +1661,25 @@
     }
 
     const snapshot = state.engine.getSnapshot();
+
+    if (state.instance.problemType === 'roommates') {
+      const n = state.instance.people.length;
+      const matchedPairs = Array.isArray(snapshot.pairs) ? snapshot.pairs.length : 0;
+      const matchedPeople = matchedPairs * 2;
+      const singles = Math.max(0, n - matchedPeople);
+
+      els.proposalCount.textContent = String(snapshot.proposalCount || 0);
+      els.engagedCount.textContent = String(matchedPairs);
+      els.singleMenCount.textContent = String(singles);
+      els.singleWomenCount.textContent = '0';
+
+      const done = Boolean(snapshot.done);
+      els.runStepBtn.disabled = done;
+      els.autoRunBtn.disabled = done;
+      els.runFullBtn.disabled = done;
+      return;
+    }
+
     const menMatched = new Set();
     const womenMatched = new Set();
     for (const pair of snapshot.pairs) {
@@ -1376,6 +1699,38 @@
   }
 
   function buildCodeLines() {
+    if (isRoommatesVariant(state.variant)) {
+      return [
+        '1  # Irving Stable Roommates (O(n^2))',
+        '2  init reduced preference table T from full strict lists',
+        '3  hold = {q: None for q in P}',
+        '4  next_idx = {p: 0 for p in P}',
+        '5  free = deque(P)',
+        '6  while free:',
+        '7      p = free.popleft()',
+        '8      if p exhausted: return NO_STABLE_MATCHING',
+        '9      q = next active name in p\'s list',
+        '10     p proposes to q',
+        '11     if hold[q] is None:',
+        '12         hold[q] = p',
+        '13     else:',
+        '14         p_prime = hold[q]',
+        '15         if q prefers p over p_prime:',
+        '16             hold[q] = p; delete (p_prime, q); free.append(p_prime)',
+        '17         else:',
+        '18             delete (p, q); free.append(p)',
+        '19 for each q in P:',
+        '20     p = hold[q]',
+        '21     delete every successor of p on q list (symmetrically)',
+        '22 while exists p with list size > 1:',
+        '23     find rotation r = (x0,y0),...,(xk-1,yk-1)',
+        '24     for each i: yi rejects xi',
+        '25     for each i: delete successors of x(i-1) on yi list',
+        '26     if any list becomes empty: return NO_STABLE_MATCHING',
+        '27 return singleton pairs from reduced table'
+      ];
+    }
+
     if (state.variant === 'capacity') {
       const capacityOnProposer = state.proposerSide !== 'women';
       if (!capacityOnProposer) {
@@ -1471,6 +1826,107 @@
     }
 
     const snapshot = state.engine.getSnapshot();
+    if (snapshot.problemType === 'roommates') {
+      const names = snapshot.names || [];
+      const rowLimit = 260;
+      const prefRows = names.slice(0, rowLimit)
+        .map((name) => `
+          <tr>
+            <td>${escapeHtml(name)}</td>
+            <td class="ds-prefs-cell">${escapeHtml((snapshot.originalPrefs[name] || []).slice(0, 10).join(', ') || '-')}</td>
+          </tr>
+        `)
+        .join('');
+      const reducedRows = names.slice(0, rowLimit)
+        .map((name) => `
+          <tr>
+            <td>${escapeHtml(name)}</td>
+            <td class="ds-prefs-cell">${escapeHtml((snapshot.reducedPrefs[name] || []).join(', ') || '-')}</td>
+          </tr>
+        `)
+        .join('');
+      const holdRows = names.slice(0, rowLimit)
+        .map((name) => `
+          <tr>
+            <td>${escapeHtml(name)}</td>
+            <td>${escapeHtml(snapshot.hold[name] || '-')}</td>
+          </tr>
+        `)
+        .join('');
+      const nextRows = names.slice(0, rowLimit)
+        .map((name) => `
+          <tr>
+            <td>${escapeHtml(name)}</td>
+            <td>${escapeHtml(String(snapshot.nextIndex[name] || 0))}</td>
+          </tr>
+        `)
+        .join('');
+      const queueCells = (snapshot.queueRemaining || []).slice(0, rowLimit)
+        .map((name, idx) => `
+          <span class="ds-queue-cell">
+            <small>${idx}</small>
+            <span>${escapeHtml(name)}</span>
+          </span>
+        `)
+        .join('');
+
+      const rotationText = snapshot.rotation
+        ? snapshot.rotation.p.map((p, i) => `(${p}, ${snapshot.rotation.y[i]})`).join(', ')
+        : '-';
+
+      els.dsDisplay.innerHTML = `
+        <div class="ds-grid">
+          <section class="ds-card ds-card-wide">
+            <h4>phase</h4>
+            <div class="ds-badges"><span class="ds-badge">${escapeHtml(snapshot.phase || '-')}</span></div>
+          </section>
+
+          <section class="ds-card ds-card-wide">
+            <h4>prefs (original)</h4>
+            <table class="ds-mini-table">
+              <thead><tr><th>${escapeHtml(state.groupNames.roommates)}</th><th>${escapeHtml(t('table_prefs'))}</th></tr></thead>
+              <tbody>${prefRows || `<tr><td colspan="2">-</td></tr>`}</tbody>
+            </table>
+          </section>
+
+          <section class="ds-card ds-card-wide">
+            <h4>T (reduced table)</h4>
+            <table class="ds-mini-table">
+              <thead><tr><th>${escapeHtml(state.groupNames.roommates)}</th><th>${escapeHtml(t('table_prefs'))}</th></tr></thead>
+              <tbody>${reducedRows || `<tr><td colspan="2">-</td></tr>`}</tbody>
+            </table>
+          </section>
+
+          <section class="ds-card">
+            <h4>hold</h4>
+            <table class="ds-mini-table">
+              <thead><tr><th>q</th><th>hold[q]</th></tr></thead>
+              <tbody>${holdRows || `<tr><td colspan="2">-</td></tr>`}</tbody>
+            </table>
+          </section>
+
+          <section class="ds-card">
+            <h4>next_idx</h4>
+            <table class="ds-mini-table">
+              <thead><tr><th>p</th><th>idx</th></tr></thead>
+              <tbody>${nextRows || `<tr><td colspan="2">-</td></tr>`}</tbody>
+            </table>
+          </section>
+
+          <section class="ds-card ds-card-wide">
+            <h4>free = deque</h4>
+            <div class="ds-queue-track">${queueCells || `<span class="ds-empty">${escapeHtml(t('partner_none'))}</span>`}</div>
+          </section>
+
+          <section class="ds-card ds-card-wide">
+            <h4>rotation</h4>
+            <div class="ds-badges"><span class="ds-badge">${escapeHtml(rotationText)}</span></div>
+          </section>
+        </div>
+      `;
+      return;
+    }
+
     const side = snapshot.orientation.side;
     const proposerLabel = side === 'men' ? state.groupNames.men : state.groupNames.women;
     const receiverLabel = side === 'men' ? state.groupNames.women : state.groupNames.men;
@@ -1706,6 +2162,70 @@
     return `${rank}${suffix}`;
   }
 
+  function roommatesPrefTableHtml(snapshot) {
+    const names = snapshot.names || [];
+    const maxPrefLen = names.reduce((acc, name) => Math.max(acc, (snapshot.originalPrefs[name] || []).length), 0);
+    const maxCols = state.prefTablesStacked
+      ? (maxPrefLen <= 24 ? maxPrefLen : 24)
+      : (maxPrefLen <= 12 ? maxPrefLen : 12);
+    const headerCols = [];
+    for (let i = 0; i < maxCols; i += 1) {
+      headerCols.push(`<th>${escapeHtml(rankHeaderLabel(i))}</th>`);
+    }
+
+    const { partnerLists } = buildRoommatesLiveLinks(snapshot);
+    const ev = snapshot.lastEvent || {};
+    const activeNames = new Set([ev.proposer, ev.receiver, ev.participant, ev.removed, ev.pivot].filter(Boolean));
+
+    const rows = names.map((name) => {
+      const original = snapshot.originalPrefs[name] || [];
+      const activeSet = snapshot.activeMap[name] || new Set();
+      const partners = new Set(partnerLists[name] || []);
+      const partnerCount = partners.size;
+      const recentlySingle = state.recentlySingle.has(name) && partnerCount === 0;
+      const marker = tableStatusMarkerHtml('men', name, partnerCount, recentlySingle);
+      const rowClass = activeNames.has(name) ? 'active-row' : '';
+      const prefCells = [];
+      for (let i = 0; i < maxCols; i += 1) {
+        const candidate = original[i];
+        const classes = ['pref-cell'];
+        if (!candidate) {
+          classes.push('muted');
+          prefCells.push(`<td class="${classes.join(' ')}">-</td>`);
+          continue;
+        }
+        if (!activeSet.has(candidate)) {
+          classes.push('deleted');
+        }
+        if (partners.has(candidate)) {
+          classes.push('engaged');
+        }
+        if ((ev.proposer === name && ev.receiver === candidate) || (ev.participant === name && ev.removed === candidate)) {
+          classes.push('proposed');
+        }
+        prefCells.push(`<td class="${classes.join(' ')}">${escapeHtml(candidate)}</td>`);
+      }
+      return `
+        <tr class="${rowClass}">
+          <td class="name-cell${partnerCount > 0 ? ' engaged' : ''}">${escapeHtml(name)}${marker ? ` ${marker}` : ''}</td>
+          ${prefCells.join('')}
+        </tr>
+      `;
+    }).join('');
+
+    return `
+      <table class="pref-table pref-table-matrix">
+        <thead>
+          <tr>
+            <th>${escapeHtml(state.groupNames.roommates)}</th>
+            ${headerCols.join('')}
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+    `;
+  }
+
   function prefTableHtml(side, names, prefsMap, partnersMap, activeRowName, activeTarget) {
     const maxPrefLen = names.reduce((acc, name) => Math.max(acc, (prefsMap[name] || []).length), 0);
     const sideBySideCols = maxPrefLen <= 12 ? maxPrefLen : 8;
@@ -1798,6 +2318,12 @@
     }
 
     const snapshot = state.engine.getSnapshot();
+    if (snapshot.problemType === 'roommates') {
+      els.menPrefTable.innerHTML = roommatesPrefTableHtml(snapshot);
+      els.womenPrefTable.innerHTML = '';
+      return;
+    }
+
     const ev = snapshot.lastEvent || {};
     const { menPartners, womenPartners } = buildPartnerMaps(snapshot.pairs);
 
@@ -1834,6 +2360,23 @@
     const step = (yBottom - yTop) / (names.length - 1);
     for (let i = 0; i < names.length; i += 1) {
       out[names[i]] = { x, y: yTop + (step * i) };
+    }
+    return out;
+  }
+
+  function getCircularCoords(names, cx, cy, radius) {
+    const out = {};
+    const total = names.length;
+    if (!total) {
+      return out;
+    }
+    const step = (Math.PI * 2) / total;
+    for (let i = 0; i < total; i += 1) {
+      const angle = (-Math.PI / 2) + (i * step);
+      out[names[i]] = {
+        x: cx + (radius * Math.cos(angle)),
+        y: cy + (radius * Math.sin(angle))
+      };
     }
     return out;
   }
@@ -1936,6 +2479,134 @@
     const snapshot = state.engine.getSnapshot();
     const orientation = snapshot.orientation;
     const ev = snapshot.lastEvent || {};
+
+    if (snapshot.problemType === 'roommates') {
+      const names = snapshot.names || [];
+      const total = names.length;
+      const width = 1200;
+      const height = 620;
+      els.matchGraph.setAttribute('viewBox', `0 0 ${width} ${height}`);
+      const cx = width / 2;
+      const cy = height / 2;
+      const radius = Math.max(120, Math.min(252, (Math.min(width, height) / 2) - 54));
+      const coords = getCircularCoords(names, cx, cy, radius);
+      const detailed = total <= 220;
+      const avatars = total <= 260;
+      els.graphModeTag.textContent = detailed ? t('graph_mode_full') : t('graph_mode_large');
+
+      const {
+        partnerLists,
+        liveEdges,
+        liveEdgeKeys
+      } = buildRoommatesLiveLinks(snapshot);
+
+      const indexMap = {};
+      for (const name of names) {
+        const rank = {};
+        const pref = snapshot.originalPrefs[name] || [];
+        for (let i = 0; i < pref.length; i += 1) {
+          rank[pref[i]] = i;
+        }
+        indexMap[name] = rank;
+      }
+
+      const reducedActiveMap = snapshot.activeMap || {};
+      const isReducedActivePair = (a, b) => {
+        const sa = reducedActiveMap[a];
+        const sb = reducedActiveMap[b];
+        if (!sa || !sb || typeof sa.has !== 'function' || typeof sb.has !== 'function') {
+          return false;
+        }
+        return sa.has(b) && sb.has(a);
+      };
+
+      const topK = detailed ? (total <= 12 ? total - 1 : (total <= 60 ? 4 : 2)) : 1;
+      const edgeLines = [];
+      if (total > 220) {
+        for (let i = 0; i < names.length; i += 1) {
+          const a = names[i];
+          const b = names[(i + 1) % names.length];
+          const from = coords[a];
+          const to = coords[b];
+          edgeLines.push(`<line class="graph-room-edge" x1="${from.x}" y1="${from.y}" x2="${to.x}" y2="${to.y}" stroke-width="1"></line>`);
+        }
+      } else {
+        for (let i = 0; i < names.length; i += 1) {
+          for (let j = i + 1; j < names.length; j += 1) {
+            const a = names[i];
+            const b = names[j];
+            const ra = indexMap[a] && Number.isFinite(indexMap[a][b]) ? indexMap[a][b] : 9999;
+            const rb = indexMap[b] && Number.isFinite(indexMap[b][a]) ? indexMap[b][a] : 9999;
+            const edgeKey = a < b ? `${a}|${b}` : `${b}|${a}`;
+            const engaged = liveEdgeKeys.has(edgeKey);
+            const deleted = !isReducedActivePair(a, b);
+            const showDeletedAll = total <= 120;
+            if (!engaged && !deleted && ra >= topK && rb >= topK) {
+              continue;
+            }
+            if (deleted && !showDeletedAll && ra >= topK && rb >= topK && !engaged) {
+              continue;
+            }
+
+            const from = coords[a];
+            const to = coords[b];
+            const rankScale = Math.min(ra, rb);
+            const widthStroke = Math.max(0.8, 3.8 - (Math.min(rankScale, topK) * (2.6 / Math.max(1, topK))));
+            const edgeClass = deleted ? 'graph-room-deleted' : 'graph-room-edge';
+            edgeLines.push(`<line class="${edgeClass}" x1="${from.x}" y1="${from.y}" x2="${to.x}" y2="${to.y}" stroke-width="${widthStroke.toFixed(2)}"></line>`);
+          }
+        }
+      }
+
+      const engagedEdges = [];
+      for (const edge of liveEdges) {
+        const from = coords[edge.a];
+        const to = coords[edge.b];
+        if (!from || !to) {
+          continue;
+        }
+        engagedEdges.push(`<line class="graph-room-engaged" x1="${from.x}" y1="${from.y}" x2="${to.x}" y2="${to.y}"></line>`);
+      }
+
+      let activeEdge = '';
+      if (ev.proposer && ev.receiver && coords[ev.proposer] && coords[ev.receiver]) {
+        const from = coords[ev.proposer];
+        const to = coords[ev.receiver];
+        activeEdge = `<line class="graph-room-active" x1="${from.x}" y1="${from.y}" x2="${to.x}" y2="${to.y}"></line>`;
+      } else if (ev.participant && ev.removed && coords[ev.participant] && coords[ev.removed]) {
+        const from = coords[ev.participant];
+        const to = coords[ev.removed];
+        activeEdge = `<line class="graph-room-active" x1="${from.x}" y1="${from.y}" x2="${to.x}" y2="${to.y}"></line>`;
+      }
+
+      const showNames = total <= 140;
+      const nodes = names.map((name, idx) => {
+        const c = coords[name];
+        const partners = partnerLists[name] || [];
+        const rank = rankValue(snapshot.originalPrefs[name] || [], partners);
+        const exhausted = state.exhaustedProposers.has(name);
+        const recentlySingle = state.recentlySingle.has(name) && partners.length === 0;
+        const side = (idx % 2 === 0) ? 'men' : 'women';
+
+        if (!avatars) {
+          const color = graphClothesColor(side, name, exhausted);
+          const status = graphStatusMarkerSvg(side, name, c.x, c.y - 20, partners.length, recentlySingle, 8);
+          return `
+            ${status}
+            <circle cx="${c.x}" cy="${c.y}" r="${detailed ? 10 : 6}" fill="${color}" stroke="rgba(0,0,0,0.25)" stroke-width="1"></circle>
+            ${showNames ? `<text class="graph-node-label" x="${c.x}" y="${c.y + 24}" text-anchor="middle">${escapeHtml(name)}</text>` : ''}
+            <text class="graph-rank-label" x="${c.x}" y="${c.y - 16}" text-anchor="middle">${escapeHtml(t('legend_rank'))}:${escapeHtml(rank)}</text>
+          `;
+        }
+
+        return `
+          ${avatarSvg(name, c, side, partners.length, recentlySingle, exhausted, rank, showNames, -34)}
+        `;
+      }).join('');
+
+      els.matchGraph.innerHTML = `${edgeLines.join('')}${engagedEdges.join('')}${activeEdge}${nodes}`;
+      return;
+    }
 
     const men = state.instance.men;
     const women = state.instance.women;
@@ -2110,6 +2781,36 @@
     }
 
     const snapshot = state.engine.getSnapshot();
+    if (snapshot.problemType === 'roommates') {
+      if (snapshot.done && !state.insightsCache) {
+        state.insightsCache = GSAlgorithms.analyzeSnapshot(state.instance, state.proposerSide, snapshot);
+      }
+      if (!snapshot.done || !state.insightsCache) {
+        const pendingCards = [
+          insightCardHtml('neutral', t('insight_perfect_title'), t('insight_pending')),
+          insightCardHtml('neutral', t('insight_stable_title'), t('insight_pending')),
+          insightCardHtml('neutral', t('insight_terminates_title'), t('insight_pending')),
+          insightCardHtml('neutral', t('insight_exists_title'), t('insight_pending'))
+        ];
+        els.insightsGrid.innerHTML = pendingCards.join('');
+        return;
+      }
+
+      const insight = state.insightsCache;
+      const stable = insight.hasStableMatching && insight.instabilityCount === 0;
+      const cards = [
+        insightCardHtml(insight.perfect ? 'good' : 'bad', t('insight_perfect_title'), insight.perfect ? t('insight_true') : t('insight_false')),
+        insightCardHtml(stable ? 'good' : 'bad', t('insight_stable_title'), stable ? t('insight_true') : t('insight_false')),
+        insightCardHtml(insight.terminatesWithinBound ? 'good' : 'bad', t('insight_terminates_title'), t('insight_termination_value', {
+          used: insight.usedProposals,
+          bound: insight.terminationBound
+        })),
+        insightCardHtml(insight.hasStableMatching ? 'good' : 'bad', t('insight_exists_title'), insight.hasStableMatching ? t('insight_true') : t('insight_false'))
+      ];
+      els.insightsGrid.innerHTML = cards.join('');
+      return;
+    }
+
     if (snapshot.done && !state.insightsCache) {
       state.insightsCache = GSAlgorithms.analyzeSnapshot(state.instance, state.proposerSide, snapshot);
       startOptimalityEmpiricalComputation(snapshot);
@@ -2402,7 +3103,7 @@
     const axis = `
       <line class="curve-axis" x1="${margin.left}" y1="${margin.top + chartH}" x2="${margin.left + chartW}" y2="${margin.top + chartH}"></line>
       <line class="curve-axis" x1="${margin.left}" y1="${margin.top}" x2="${margin.left}" y2="${margin.top + chartH}"></line>
-      <text class="curve-label" x="${margin.left + chartW / 2}" y="${height - 8}" text-anchor="middle">${escapeHtml(t('curve_axis_x'))}</text>
+      <text class="curve-label" x="${margin.left + chartW / 2}" y="${height - 8}" text-anchor="middle">${escapeHtml(t(isRoommatesVariant(state.variant) ? 'curve_axis_x_roommates' : 'curve_axis_x'))}</text>
       <text class="curve-label" x="16" y="${margin.top + chartH / 2}" text-anchor="middle" transform="rotate(-90 16 ${margin.top + chartH / 2})">${escapeHtml(t('curve_axis_y'))}</text>
     `;
 
@@ -2462,6 +3163,21 @@
 
   function applyTablesToInstance() {
     state.variant = els.variantSelect.value;
+    if (isRoommatesVariant(state.variant)) {
+      try {
+        const roomData = parseEditorRows(els.menEditorTable, 'men', { includeCap: false, includeCategory: false });
+        const instance = GSAlgorithms.normalizeRoommatesInstance({
+          name: 'roommates_custom',
+          people: roomData.men,
+          prefs: roomData.mPrefs
+        });
+        loadInstance(instance, 'status_table_applied');
+      } catch (error) {
+        setStatus('status_invalid');
+      }
+      return;
+    }
+
     const includeCapMen = state.variant === 'capacity';
     const includeCapWomen = false;
     const includeCategory = state.variant === 'good_bad';
@@ -2520,11 +3236,22 @@
     let end = readNumberInput(els.curveEndInput, 200, 2, 2000);
     const step = readNumberInput(els.curveStepInput, 10, 1, 1000);
     const repeats = readNumberInput(els.curveRepeatsInput, 3, 1, 100);
+    const roommates = isRoommatesVariant(state.variant);
 
     if (start > end) {
       const tmp = start;
       start = end;
       end = tmp;
+      els.curveStartInput.value = String(start);
+      els.curveEndInput.value = String(end);
+    }
+
+    if (roommates) {
+      if ((start % 2) !== 0) start += 1;
+      if ((end % 2) !== 0) end -= 1;
+      if (end < start) {
+        end = start;
+      }
       els.curveStartInput.value = String(start);
       els.curveEndInput.value = String(end);
     }
@@ -2539,7 +3266,13 @@
 
     const points = [];
     for (let n = start; n <= end; n += step) {
-      points.push(n);
+      const point = roommates && (n % 2 !== 0) ? n + 1 : n;
+      if (point > end) {
+        continue;
+      }
+      if (!points.includes(point)) {
+        points.push(point);
+      }
       if (points.length >= 220) break;
     }
 
@@ -2553,9 +3286,15 @@
       const n = points[i];
       let sumRandom = 0;
 
-      const inverseInst = GSAlgorithms.presets.inverse(n);
-      const easyInst = GSAlgorithms.presets.easy(n);
-      const worstInst = GSAlgorithms.presets.worstCase(n);
+      const inverseInst = roommates
+        ? GSAlgorithms.roommatesPresets.inverse(n)
+        : GSAlgorithms.presets.inverse(n);
+      const easyInst = roommates
+        ? GSAlgorithms.roommatesPresets.easy(n)
+        : GSAlgorithms.presets.easy(n);
+      const worstInst = roommates
+        ? GSAlgorithms.roommatesPresets.worstCase(n)
+        : GSAlgorithms.presets.worstCase(n);
 
       const eInverse = createEngine(inverseInst, state.proposerSide);
       const eEasy = createEngine(easyInst, state.proposerSide);
@@ -2572,7 +3311,9 @@
       for (let r = 0; r < repeats; r += 1) {
         const seed = (n * 10007) + (r * 97) + i;
 
-        const randomInst = GSAlgorithms.presets.random(n, seed);
+        const randomInst = roommates
+          ? GSAlgorithms.roommatesPresets.random(n, seed)
+          : GSAlgorithms.presets.random(n, seed);
 
         const eRandom = createEngine(randomInst, state.proposerSide);
 
@@ -2589,8 +3330,8 @@
         worstCase: worstValue,
         linear: n,
         half: (n * (n + 1)) / 2,
-        square: n * n,
-        worstTheory: (n * (n - 1)) + 1
+        square: roommates ? (n * Math.max(1, n - 1)) : (n * n),
+        worstTheory: roommates ? (n * Math.max(1, n - 1)) : ((n * (n - 1)) + 1)
       });
 
       state.curves.progress = t('curve_progress', {
@@ -2762,6 +3503,9 @@
       if (state.variant === 'capacity') {
         els.proposerSelect.value = 'men';
         state.proposerSide = 'men';
+      } else if (state.variant === 'roommates') {
+        els.proposerSelect.value = 'men';
+        state.proposerSide = 'men';
       }
       syncDefaultGroupInputs();
       updateVariantFieldsVisibility();
@@ -2823,6 +3567,12 @@
 
     els.groupRightInput.addEventListener('input', () => {
       els.groupRightInput.dataset.default = '0';
+      updateDynamicLabels();
+      renderAll();
+    });
+
+    els.groupSingleInput.addEventListener('input', () => {
+      els.groupSingleInput.dataset.default = '0';
       updateDynamicLabels();
       renderAll();
     });
@@ -2933,6 +3683,7 @@
 
     els.groupLeftInput.dataset.default = '1';
     els.groupRightInput.dataset.default = '1';
+    els.groupSingleInput.dataset.default = '1';
 
     setTheme('light');
     setLanguage('en');

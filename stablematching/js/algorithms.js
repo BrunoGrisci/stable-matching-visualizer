@@ -233,7 +233,55 @@
     };
   }
 
+  function normalizeRoommatesInstance(raw) {
+    const input = raw || {};
+    const prefSource = input.prefs || {};
+    const peopleFromPrefs = Object.keys(prefSource);
+    const people = uniqueList([...(input.people || []), ...peopleFromPrefs]);
+    const n = people.length;
+
+    if (!n || (n % 2) !== 0) {
+      throw new Error('Stable roommates requires an even number of participants.');
+    }
+
+    const peopleSet = new Set(people);
+    const prefs = {};
+    for (const person of people) {
+      const list = uniqueList(prefSource[person] || []);
+      if (list.length !== n - 1) {
+        throw new Error(`${person} must rank exactly ${n - 1} participants.`);
+      }
+      if (list.includes(person)) {
+        throw new Error(`${person} cannot rank themselves.`);
+      }
+      for (const other of list) {
+        if (!peopleSet.has(other)) {
+          throw new Error(`${person} has unknown participant ${other}.`);
+        }
+      }
+      prefs[person] = list.slice();
+    }
+
+    return {
+      name: trimString(input.name) || 'roommates',
+      problemType: 'roommates',
+      people,
+      prefs
+    };
+  }
+
+  function cloneRoommatesInstance(instance) {
+    return normalizeRoommatesInstance({
+      name: instance.name,
+      people: instance.people.slice(),
+      prefs: Object.fromEntries(instance.people.map((p) => [p, (instance.prefs[p] || []).slice()]))
+    });
+  }
+
   function cloneInstance(instance) {
+    if (instance && instance.problemType === 'roommates') {
+      return cloneRoommatesInstance(instance);
+    }
     return normalizeInstance({
       name: instance.name,
       men: instance.men.slice(),
@@ -1279,6 +1327,10 @@
   }
 
   function analyzeSnapshot(instance, proposerSide, snapshot) {
+    if (instance && instance.problemType === 'roommates') {
+      return analyzeRoommatesSnapshot(instance, snapshot);
+    }
+
     const orientation = snapshot.orientation;
     const instabilityCount = countInstabilities(
       orientation,
@@ -1371,6 +1423,26 @@
         Xavier: ['Boston', 'Chicago', 'Detroit', 'El Paso', 'Atlanta'],
         Yolanda: ['Atlanta', 'El Paso', 'Detroit', 'Chicago', 'Boston'],
         Zeus: ['Detroit', 'Boston', 'El Paso', 'Chicago', 'Atlanta']
+      }
+    });
+  }
+
+  function createNumberphilePrideInstance() {
+    return normalizeInstance({
+      name: 'Numberphile / Pride and Prejudice',
+      men: ['Bingley', 'Collins', 'Darcy', 'Wickham'],
+      women: ['Charlotte', 'Elizabeth', 'Jane', 'Lydia'],
+      mPrefs: {
+        Bingley: ['Jane', 'Elizabeth', 'Lydia', 'Charlotte'],
+        Collins: ['Jane', 'Elizabeth', 'Lydia', 'Charlotte'],
+        Darcy: ['Elizabeth', 'Jane', 'Charlotte', 'Lydia'],
+        Wickham: ['Lydia', 'Jane', 'Elizabeth', 'Charlotte']
+      },
+      wPrefs: {
+        Charlotte: ['Bingley', 'Darcy', 'Collins', 'Wickham'],
+        Elizabeth: ['Wickham', 'Darcy', 'Bingley', 'Collins'],
+        Jane: ['Bingley', 'Wickham', 'Darcy', 'Collins'],
+        Lydia: ['Bingley', 'Wickham', 'Darcy', 'Collins']
       }
     });
   }
@@ -1517,6 +1589,756 @@
     });
   }
 
+  function evenSize(n) {
+    let size = clamp(toInt(n, 6), 2, 2000);
+    if ((size % 2) !== 0) {
+      size = Math.min(2000, size + 1);
+    }
+    return size;
+  }
+
+  function createRoommatesRandomInstance(n, seed) {
+    const size = evenSize(n);
+    const people = sequentialNames('P', size);
+    const rng = createRng(seed);
+    const prefs = {};
+    for (let i = 0; i < people.length; i += 1) {
+      const person = people[i];
+      prefs[person] = shuffled(people.filter((x) => x !== person), rng);
+    }
+    return normalizeRoommatesInstance({
+      name: 'roommates_random',
+      people,
+      prefs
+    });
+  }
+
+  function createRoommatesInverseInstance(n) {
+    const size = evenSize(n);
+    const people = sequentialNames('P', size);
+    const prefs = {};
+    for (let i = 0; i < people.length; i += 1) {
+      const person = people[i];
+      const others = [];
+      for (let off = 1; off < people.length; off += 1) {
+        others.push(people[(i + off) % people.length]);
+      }
+      prefs[person] = others;
+    }
+    return normalizeRoommatesInstance({
+      name: 'roommates_inverse',
+      people,
+      prefs
+    });
+  }
+
+  function createRoommatesEasyInstance(n) {
+    const size = evenSize(n);
+    const people = sequentialNames('P', size);
+    const prefs = {};
+    for (let i = 0; i < people.length; i += 1) {
+      const person = people[i];
+      const partner = (i % 2 === 0) ? people[i + 1] : people[i - 1];
+      const tail = people.filter((x) => x !== person && x !== partner);
+      prefs[person] = [partner, ...tail];
+    }
+    return normalizeRoommatesInstance({
+      name: 'roommates_easy',
+      people,
+      prefs
+    });
+  }
+
+  function createRoommatesWorstCaseInstance(n) {
+    const size = evenSize(n);
+    const people = sequentialNames('P', size);
+    const prefs = {};
+    for (let i = 0; i < people.length; i += 1) {
+      const person = people[i];
+      const out = [];
+      const seen = new Set([person]);
+      let radius = 1;
+      while (out.length < people.length - 1) {
+        const right = people[(i + radius) % people.length];
+        if (!seen.has(right)) {
+          out.push(right);
+          seen.add(right);
+        }
+        if (out.length >= people.length - 1) {
+          break;
+        }
+        const left = people[(i - radius + people.length) % people.length];
+        if (!seen.has(left)) {
+          out.push(left);
+          seen.add(left);
+        }
+        radius += 1;
+      }
+      prefs[person] = out;
+    }
+    return normalizeRoommatesInstance({
+      name: 'roommates_worst_case',
+      people,
+      prefs
+    });
+  }
+
+  function createRoommatesWikipediaExample() {
+    return normalizeRoommatesInstance({
+      name: 'roommates_wikipedia',
+      people: ['1', '2', '3', '4', '5', '6'],
+      prefs: {
+        '1': ['3', '4', '2', '6', '5'],
+        '2': ['6', '5', '4', '1', '3'],
+        '3': ['2', '4', '5', '1', '6'],
+        '4': ['5', '2', '3', '6', '1'],
+        '5': ['3', '1', '2', '4', '6'],
+        '6': ['5', '1', '3', '4', '2']
+      }
+    });
+  }
+
+  function createRoommatesWikipediaNoSolution() {
+    return normalizeRoommatesInstance({
+      name: 'roommates_wikipedia_no_solution',
+      people: ['A', 'B', 'C', 'D'],
+      prefs: {
+        A: ['B', 'C', 'D'],
+        B: ['C', 'A', 'D'],
+        C: ['A', 'B', 'D'],
+        D: ['A', 'B', 'C']
+      }
+    });
+  }
+
+  function createRoommatesTranscriptNoSolution() {
+    return normalizeRoommatesInstance({
+      name: 'roommates_transcript_no_solution',
+      people: ['A', 'B', 'C', 'M'],
+      prefs: {
+        A: ['B', 'C', 'M'],
+        B: ['C', 'A', 'M'],
+        C: ['A', 'B', 'M'],
+        M: ['A', 'B', 'C']
+      }
+    });
+  }
+
+  function roommatePairObject(a, b) {
+    const first = String(a);
+    const second = String(b);
+    if (first <= second) {
+      return {
+        man: first,
+        woman: second,
+        key: `${first}|${second}`
+      };
+    }
+    return {
+      man: second,
+      woman: first,
+      key: `${second}|${first}`
+    };
+  }
+
+  class IrvingEngine {
+    constructor(instance) {
+      this.instance = cloneRoommatesInstance(instance);
+      this.names = this.instance.people.slice();
+      this.n = this.names.length;
+      this.nameToIdx = Object.fromEntries(this.names.map((name, idx) => [name, idx]));
+      this.pref = this.names.map((name) => (this.instance.prefs[name] || []).map((q) => this.nameToIdx[q]));
+
+      this.rank = Array.from({ length: this.n }, () => Array(this.n).fill(this.n + 1));
+      for (let p = 0; p < this.n; p += 1) {
+        const row = this.pref[p];
+        for (let i = 0; i < row.length; i += 1) {
+          this.rank[p][row[i]] = i;
+        }
+      }
+
+      this.left = Array.from({ length: this.n }, () => Array(this.n).fill(-1));
+      this.right = Array.from({ length: this.n }, () => Array(this.n).fill(-1));
+      this.active = Array.from({ length: this.n }, () => Array(this.n).fill(false));
+      this.first = Array(this.n).fill(-1);
+      this.last = Array(this.n).fill(-1);
+      this.size = Array(this.n).fill(0);
+
+      for (let p = 0; p < this.n; p += 1) {
+        const row = this.pref[p];
+        this.first[p] = row[0];
+        this.last[p] = row[row.length - 1];
+        this.size[p] = row.length;
+        for (let i = 0; i < row.length; i += 1) {
+          const q = row[i];
+          this.active[p][q] = true;
+          this.left[p][q] = i > 0 ? row[i - 1] : -1;
+          this.right[p][q] = (i + 1 < row.length) ? row[i + 1] : -1;
+        }
+      }
+
+      this.hold = Array(this.n).fill(-1);
+      this.nextIdx = Array(this.n).fill(0);
+      this.queue = Array.from({ length: this.n }, (_, i) => i);
+      this.head = 0;
+
+      this.phase = 'phase1_propose';
+      this.trimQ = 0;
+      this.trimCursor = -1;
+      this.rotation = null;
+
+      this.proposalCount = 0;
+      this.stepCount = 0;
+      this.done = false;
+      this.hasStableMatching = null;
+      this.totalPossibleProposals = this.n * (this.n - 1);
+
+      this.lastEvent = {
+        type: 'initial',
+        line: 1,
+        key: 'step_initial_roommates'
+      };
+    }
+
+    idxName(idx) {
+      return idx >= 0 ? this.names[idx] : null;
+    }
+
+    removeOne(a, b) {
+      if (!this.active[a][b]) {
+        return false;
+      }
+      const l = this.left[a][b];
+      const r = this.right[a][b];
+      if (l !== -1) {
+        this.right[a][l] = r;
+      } else {
+        this.first[a] = r;
+      }
+      if (r !== -1) {
+        this.left[a][r] = l;
+      } else {
+        this.last[a] = l;
+      }
+      this.active[a][b] = false;
+      this.left[a][b] = -1;
+      this.right[a][b] = -1;
+      this.size[a] -= 1;
+      return true;
+    }
+
+    deletePair(a, b) {
+      const c1 = this.removeOne(a, b);
+      const c2 = this.removeOne(b, a);
+      return c1 || c2;
+    }
+
+    emit(event) {
+      this.stepCount += 1;
+      this.lastEvent = {
+        ...event,
+        proposalCount: this.proposalCount,
+        phase: this.phase
+      };
+      return this.lastEvent;
+    }
+
+    finishNoSolution(key, line, data = {}) {
+      this.done = true;
+      this.hasStableMatching = false;
+      this.phase = 'done_no_solution';
+      return this.emit({
+        type: 'finished',
+        key,
+        line,
+        noStable: true,
+        ...data
+      });
+    }
+
+    finishStable(line = 49) {
+      this.done = true;
+      this.hasStableMatching = true;
+      this.phase = 'done_stable';
+      return this.emit({
+        type: 'finished',
+        key: 'step_room_finished_stable',
+        line,
+        noStable: false
+      });
+    }
+
+    collectReducedList(p) {
+      const out = [];
+      let cur = this.first[p];
+      while (cur !== -1) {
+        out.push(cur);
+        cur = this.right[p][cur];
+      }
+      return out;
+    }
+
+    currentPairs() {
+      const out = [];
+      for (let p = 0; p < this.n; p += 1) {
+        const q = this.first[p];
+        if (q === -1 || p >= q) {
+          continue;
+        }
+        if (this.first[q] === p) {
+          out.push(roommatePairObject(this.names[p], this.names[q]));
+        }
+      }
+      return out;
+    }
+
+    phase1Step() {
+      while (this.head < this.queue.length) {
+        const p = this.queue[this.head];
+        this.head += 1;
+
+        while (this.nextIdx[p] < this.n - 1 && !this.active[p][this.pref[p][this.nextIdx[p]]]) {
+          this.nextIdx[p] += 1;
+        }
+
+        if (this.nextIdx[p] >= this.n - 1) {
+          return this.finishNoSolution('step_room_exhausted', 8, {
+            proposer: this.idxName(p)
+          });
+        }
+
+        const q = this.pref[p][this.nextIdx[p]];
+        this.nextIdx[p] += 1;
+        this.proposalCount += 1;
+
+        const cur = this.hold[q];
+        if (cur === -1) {
+          this.hold[q] = p;
+          return this.emit({
+            type: 'room_accept',
+            key: 'step_room_accept',
+            line: 12,
+            proposer: this.idxName(p),
+            receiver: this.idxName(q)
+          });
+        }
+
+        if (this.rank[q][p] < this.rank[q][cur]) {
+          this.hold[q] = p;
+          this.deletePair(cur, q);
+          if (this.size[cur] === 0 || this.size[q] === 0) {
+            return this.finishNoSolution('step_room_finished_no_solution', 42, {
+              proposer: this.idxName(p),
+              receiver: this.idxName(q),
+              displaced: this.idxName(cur)
+            });
+          }
+          this.queue.push(cur);
+          return this.emit({
+            type: 'room_replace',
+            key: 'step_room_replace',
+            line: 15,
+            proposer: this.idxName(p),
+            receiver: this.idxName(q),
+            displaced: this.idxName(cur)
+          });
+        }
+
+        this.deletePair(p, q);
+        if (this.size[p] === 0 || this.size[q] === 0) {
+          return this.finishNoSolution('step_room_finished_no_solution', 42, {
+            proposer: this.idxName(p),
+            receiver: this.idxName(q)
+          });
+        }
+        this.queue.push(p);
+        return this.emit({
+          type: 'room_reject',
+          key: 'step_room_reject',
+          line: 17,
+          proposer: this.idxName(p),
+          receiver: this.idxName(q)
+        });
+      }
+
+      this.phase = 'phase1_trim';
+      this.trimQ = 0;
+      this.trimCursor = -1;
+      return this.phase1TrimStep();
+    }
+
+    phase1TrimStep() {
+      while (this.trimQ < this.n) {
+        const q = this.trimQ;
+        const p = this.hold[q];
+
+        if (p === -1 || !this.active[q][p]) {
+          return this.finishNoSolution('step_room_finished_no_solution', 23, {
+            participant: this.idxName(q)
+          });
+        }
+
+        if (this.trimCursor === -1) {
+          this.trimCursor = this.right[q][p];
+        }
+
+        if (this.trimCursor === -1) {
+          this.trimQ += 1;
+          this.trimCursor = -1;
+          continue;
+        }
+
+        const x = this.trimCursor;
+        this.trimCursor = this.right[q][x];
+        this.deletePair(q, x);
+        if (this.size[q] === 0 || this.size[x] === 0) {
+          return this.finishNoSolution('step_room_finished_no_solution', 23, {
+            participant: this.idxName(q),
+            removed: this.idxName(x)
+          });
+        }
+
+        return this.emit({
+          type: 'room_trim_delete',
+          key: 'step_room_trim_delete',
+          line: 23,
+          participant: this.idxName(q),
+          removed: this.idxName(x),
+          pivot: this.idxName(p)
+        });
+      }
+
+      this.phase = 'phase2_find_rotation';
+      return this.phase2FindRotationStep();
+    }
+
+    phase2FindRotationStep() {
+      let start = -1;
+      for (let i = 0; i < this.n; i += 1) {
+        if (this.size[i] > 1) {
+          start = i;
+          break;
+        }
+      }
+      if (start === -1) {
+        return this.finishStable(49);
+      }
+
+      const seen = new Map();
+      const pSeq = [];
+      let p = start;
+      while (!seen.has(p)) {
+        seen.set(p, pSeq.length);
+        pSeq.push(p);
+        const y = this.first[p];
+        const z = y !== -1 ? this.right[p][y] : -1;
+        if (z === -1) {
+          return this.finishNoSolution('step_room_finished_no_solution', 35, {
+            participant: this.idxName(p)
+          });
+        }
+        p = this.last[z];
+        if (p === -1) {
+          return this.finishNoSolution('step_room_finished_no_solution', 35, {
+            participant: this.idxName(z)
+          });
+        }
+      }
+
+      const begin = seen.get(p);
+      const rotP = pSeq.slice(begin);
+      const rotY = rotP.map((x) => this.first[x]);
+      const rotationPairs = rotP.map((x, i) => `(${this.idxName(x)}, ${this.idxName(rotY[i])})`);
+
+      this.rotation = {
+        p: rotP,
+        y: rotY,
+        rejectIdx: 0,
+        succYIndex: 0,
+        succNode: -1
+      };
+      this.phase = 'phase2_eliminate_reject';
+
+      return this.emit({
+        type: 'room_rotation_found',
+        key: 'step_room_rotation_found',
+        line: 35,
+        rotation: rotationPairs.join(', ')
+      });
+    }
+
+    phase2EliminateRejectStep() {
+      const rot = this.rotation;
+      if (!rot) {
+        this.phase = 'phase2_find_rotation';
+        return this.phase2FindRotationStep();
+      }
+
+      if (rot.rejectIdx < rot.p.length) {
+        const i = rot.rejectIdx;
+        const x = rot.p[i];
+        const y = rot.y[i];
+        this.deletePair(x, y);
+        if (this.size[x] === 0 || this.size[y] === 0) {
+          return this.finishNoSolution('step_room_finished_no_solution', 38, {
+            proposer: this.idxName(x),
+            receiver: this.idxName(y)
+          });
+        }
+        rot.rejectIdx += 1;
+        if (rot.rejectIdx >= rot.p.length) {
+          this.phase = 'phase2_eliminate_successors';
+        }
+        return this.emit({
+          type: 'room_rotation_reject',
+          key: 'step_room_rotation_reject',
+          line: 38,
+          proposer: this.idxName(x),
+          receiver: this.idxName(y)
+        });
+      }
+
+      this.phase = 'phase2_eliminate_successors';
+      return this.phase2EliminateSuccessorsStep();
+    }
+
+    phase2EliminateSuccessorsStep() {
+      const rot = this.rotation;
+      if (!rot) {
+        this.phase = 'phase2_find_rotation';
+        return this.phase2FindRotationStep();
+      }
+
+      while (rot.succYIndex < rot.y.length) {
+        const y = rot.y[rot.succYIndex];
+        const xPrev = rot.p[(rot.succYIndex - 1 + rot.p.length) % rot.p.length];
+
+        if (!this.active[y][xPrev]) {
+          return this.finishNoSolution('step_room_finished_no_solution', 42, {
+            participant: this.idxName(y),
+            pivot: this.idxName(xPrev)
+          });
+        }
+
+        if (rot.succNode === -1) {
+          rot.succNode = this.right[y][xPrev];
+        }
+
+        if (rot.succNode === -1) {
+          rot.succYIndex += 1;
+          rot.succNode = -1;
+          continue;
+        }
+
+        const t = rot.succNode;
+        rot.succNode = this.right[y][t];
+        this.deletePair(y, t);
+        if (this.size[y] === 0 || this.size[t] === 0) {
+          return this.finishNoSolution('step_room_finished_no_solution', 42, {
+            participant: this.idxName(y),
+            removed: this.idxName(t)
+          });
+        }
+
+        return this.emit({
+          type: 'room_rotation_trim',
+          key: 'step_room_rotation_trim',
+          line: 42,
+          participant: this.idxName(y),
+          removed: this.idxName(t),
+          pivot: this.idxName(xPrev)
+        });
+      }
+
+      this.rotation = null;
+      this.phase = 'phase2_find_rotation';
+      return this.phase2FindRotationStep();
+    }
+
+    step() {
+      if (this.done) {
+        return null;
+      }
+
+      if (this.phase === 'phase1_propose') {
+        return this.phase1Step();
+      }
+      if (this.phase === 'phase1_trim') {
+        return this.phase1TrimStep();
+      }
+      if (this.phase === 'phase2_find_rotation') {
+        return this.phase2FindRotationStep();
+      }
+      if (this.phase === 'phase2_eliminate_reject') {
+        return this.phase2EliminateRejectStep();
+      }
+      if (this.phase === 'phase2_eliminate_successors') {
+        return this.phase2EliminateSuccessorsStep();
+      }
+
+      return this.finishNoSolution('step_room_finished_no_solution', 49);
+    }
+
+    runToEnd(maxEvents = Number.POSITIVE_INFINITY) {
+      let count = 0;
+      while (!this.done && count < maxEvents) {
+        const ev = this.step();
+        if (!ev) {
+          break;
+        }
+        count += 1;
+      }
+      return this.getSnapshot();
+    }
+
+    getSnapshot() {
+      const reducedPrefs = {};
+      const activeMap = {};
+      const holdMap = {};
+      const nextIndex = {};
+      const firstChoices = {};
+      const secondChoices = {};
+      const lastChoices = {};
+
+      for (let p = 0; p < this.n; p += 1) {
+        const name = this.names[p];
+        const row = this.collectReducedList(p).map((idx) => this.names[idx]);
+        reducedPrefs[name] = row;
+        activeMap[name] = new Set(row);
+        holdMap[name] = this.idxName(this.hold[p]);
+        nextIndex[name] = this.nextIdx[p];
+        firstChoices[name] = row.length ? row[0] : null;
+        secondChoices[name] = row.length > 1 ? row[1] : null;
+        lastChoices[name] = row.length ? row[row.length - 1] : null;
+      }
+
+      const originalPrefs = {};
+      for (const name of this.names) {
+        originalPrefs[name] = (this.instance.prefs[name] || []).slice();
+      }
+
+      const queueRemaining = this.queue.slice(this.head).map((idx) => this.names[idx]);
+      const rotation = this.rotation
+        ? {
+          p: this.rotation.p.map((idx) => this.names[idx]),
+          y: this.rotation.y.map((idx) => this.names[idx]),
+          rejectIdx: this.rotation.rejectIdx,
+          succYIndex: this.rotation.succYIndex
+        }
+        : null;
+
+      const pairs = this.currentPairs();
+
+      return {
+        problemType: 'roommates',
+        done: this.done,
+        hasStableMatching: this.done ? Boolean(this.hasStableMatching) : null,
+        proposalCount: this.proposalCount,
+        stepCount: this.stepCount,
+        lastEvent: this.lastEvent,
+        phase: this.phase,
+        names: this.names.slice(),
+        originalPrefs,
+        reducedPrefs,
+        activeMap,
+        hold: holdMap,
+        nextIndex,
+        queueRemaining,
+        firstChoices,
+        secondChoices,
+        lastChoices,
+        rotation,
+        totalPossibleProposals: this.totalPossibleProposals,
+        pairs
+      };
+    }
+  }
+
+  function countRoommatesInstabilities(instance, pairs) {
+    const people = instance.people || [];
+    const partner = {};
+    for (const pair of pairs || []) {
+      const a = pair.man;
+      const b = pair.woman;
+      partner[a] = b;
+      partner[b] = a;
+    }
+    if (Object.keys(partner).length !== people.length) {
+      return Number.POSITIVE_INFINITY;
+    }
+
+    const rank = {};
+    for (const p of people) {
+      const map = {};
+      const list = instance.prefs[p] || [];
+      for (let i = 0; i < list.length; i += 1) {
+        map[list[i]] = i;
+      }
+      rank[p] = map;
+    }
+
+    let blocks = 0;
+    for (let i = 0; i < people.length; i += 1) {
+      for (let j = i + 1; j < people.length; j += 1) {
+        const x = people[i];
+        const y = people[j];
+        if (partner[x] === y) {
+          continue;
+        }
+        const px = partner[x];
+        const py = partner[y];
+        if (px == null || py == null) {
+          blocks += 1;
+          continue;
+        }
+        if (rank[x][y] < rank[x][px] && rank[y][x] < rank[y][py]) {
+          blocks += 1;
+        }
+      }
+    }
+    return blocks;
+  }
+
+  function analyzeRoommatesSnapshot(instance, snapshot) {
+    const hasStableMatching = Boolean(snapshot && snapshot.hasStableMatching);
+    const instabilityCount = hasStableMatching
+      ? countRoommatesInstabilities(instance, snapshot.pairs || [])
+      : 1;
+    const peopleCount = (instance.people || []).length;
+    const perfect = hasStableMatching && (snapshot.pairs || []).length === Math.floor(peopleCount / 2);
+    const bound = Number.isFinite(snapshot.totalPossibleProposals)
+      ? snapshot.totalPossibleProposals
+      : (peopleCount * Math.max(0, peopleCount - 1));
+    const used = Number.isFinite(snapshot.proposalCount) ? snapshot.proposalCount : 0;
+
+    return {
+      perfect,
+      instabilityCount,
+      terminationBound: bound,
+      usedProposals: used,
+      terminatesWithinBound: used <= bound,
+      hasStableMatching,
+      optimality: {
+        mode: 'not_applicable',
+        proposerOptimal: null,
+        receiverPessimal: null,
+        context: null,
+        empirical: {
+          mode: 'skipped',
+          reason: 'empirical_reason_not_run',
+          count: 0,
+          statesExplored: 0,
+          proposerOptimal: null,
+          receiverPessimal: null
+        }
+      },
+      goodBadProperty: {
+        mode: 'not_applicable',
+        holds: null
+      }
+    };
+  }
+
   function applyGoodBadCategories(instance, k, seed) {
     const base = cloneInstance(instance);
     const men = base.men.slice();
@@ -1584,7 +2406,11 @@
     const key = trimString(preset);
     let base;
 
-    if (key === 'inverse') {
+    if (key === 'hpl_spl') {
+      base = createHplSplInstance();
+    } else if (key === 'numberphile_pride') {
+      base = createNumberphilePrideInstance();
+    } else if (key === 'inverse') {
       base = createInverseInstance(n);
     } else if (key === 'easy') {
       base = createEasyInstance(n);
@@ -1911,6 +2737,8 @@
     const menCategory = {};
     const womenCategory = {};
     const forbidden = new Set();
+    const people = [];
+    const roommatesPrefs = {};
 
     for (const line of lines) {
       const cols = parseCsvLine(line, delimiter);
@@ -1930,6 +2758,21 @@
         if (man && woman) {
           forbidden.add(makePairKey(man, woman));
         }
+        continue;
+      }
+
+      if (group === 'roommates' || group === 'roommate' || group === 'r') {
+        const name = cols[1];
+        if (!name) {
+          continue;
+        }
+        const prefList = cols[2]
+          ? cols[2].split('|').map((x) => trimString(x)).filter(Boolean)
+          : [];
+        if (!people.includes(name)) {
+          people.push(name);
+        }
+        roommatesPrefs[name] = prefList;
         continue;
       }
 
@@ -1966,6 +2809,14 @@
       }
     }
 
+    if (people.length && !men.length && !women.length) {
+      return normalizeRoommatesInstance({
+        name: 'csv_roommates',
+        people,
+        prefs: roommatesPrefs
+      });
+    }
+
     return normalizeInstance({
       name: 'csv',
       men,
@@ -1980,7 +2831,21 @@
     });
   }
 
+  function exportRoommatesCsvInstance(instance) {
+    const lines = [];
+    lines.push('group,name,prefs,capacity,category');
+    for (const person of instance.people || []) {
+      const prefLine = (instance.prefs && instance.prefs[person] ? instance.prefs[person] : []).join('|');
+      lines.push(`roommates,${person},${prefLine},,`);
+    }
+    return `${lines.join('\n')}\n`;
+  }
+
   function exportCsvInstance(instance) {
+    if (instance && instance.problemType === 'roommates') {
+      return exportRoommatesCsvInstance(instance);
+    }
+
     const lines = [];
     lines.push('group,name,prefs,capacity,category');
 
@@ -2010,11 +2875,14 @@
 
   window.GSAlgorithms = {
     normalizeInstance,
+    normalizeRoommatesInstance,
     cloneInstance,
+    cloneRoommatesInstance,
     parseForbiddenText,
     parseCapacityText,
     parseCsvInstance,
     exportCsvInstance,
+    exportRoommatesCsvInstance,
     applyForbiddenPairs,
     generateForbiddenPairs,
     applyReceiverCapacities,
@@ -2023,11 +2891,14 @@
     createResidentMatchingInstance,
     buildOrientation,
     analyzeSnapshot,
+    analyzeRoommatesSnapshot,
     createEmpiricalOptimalityEnumerator,
     GSEngine,
+    IrvingEngine,
 
     presets: {
       hplSpl: createHplSplInstance,
+      numberphilePride: createNumberphilePrideInstance,
       homensMulheres: createHomensMulheresInstance,
       random: createRandomInstance,
       inverse: createInverseInstance,
@@ -2036,6 +2907,16 @@
       goodBad: createGoodBadInstance,
       goodBadFromPreset: createGoodBadPresetInstance,
       worstCase: createWorstCaseInstance
+    },
+
+    roommatesPresets: {
+      wikipedia: createRoommatesWikipediaExample,
+      wikipediaNoSolution: createRoommatesWikipediaNoSolution,
+      transcriptNoSolution: createRoommatesTranscriptNoSolution,
+      random: createRoommatesRandomInstance,
+      inverse: createRoommatesInverseInstance,
+      easy: createRoommatesEasyInstance,
+      worstCase: createRoommatesWorstCaseInstance
     }
   };
 })();
