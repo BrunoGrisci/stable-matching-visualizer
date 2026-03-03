@@ -532,6 +532,7 @@ body.code-collapsed #codeColumn {
 .pref-box,
 .graph-box,
 .step-log-box,
+.phase2-trace-box,
 .code-column,
 .editor-box,
 .curve-chart-box,
@@ -547,6 +548,7 @@ body.code-collapsed #codeColumn {
 .pref-box h3,
 .graph-box h3,
 .step-log-box h3,
+.phase2-trace-box h3,
 .code-column h3,
 .editor-box h3,
 .curve-controls h3,
@@ -750,6 +752,96 @@ body.code-collapsed #codeColumn {
 
 .pref-table td.pref-cell.engaged.proposed {
   box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--graph-active) 62%, transparent);
+}
+
+.phase2-trace-content {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.phase2-trace-subtitle {
+  margin: 0 0 0.3rem;
+  font-size: 0.82rem;
+  color: var(--muted);
+  font-weight: 700;
+}
+
+.phase2-cycle-wrap,
+.phase2-elim-wrap {
+  border: 1px solid color-mix(in srgb, var(--accent) 22%, transparent);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--panel) 92%, transparent);
+  overflow: auto;
+  max-width: 100%;
+  max-height: 240px;
+}
+
+.phase2-cycle-table,
+.phase2-elim-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.78rem;
+}
+
+.phase2-cycle-table th,
+.phase2-cycle-table td,
+.phase2-elim-table th,
+.phase2-elim-table td {
+  border: 1px solid color-mix(in srgb, var(--accent) 16%, transparent);
+  padding: 0.3rem 0.38rem;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.phase2-cycle-table th {
+  background: color-mix(in srgb, #5b636d 68%, var(--panel));
+  color: #f4f7fa;
+  font-weight: 700;
+}
+
+.phase2-cycle-table td {
+  background: color-mix(in srgb, var(--panel) 92%, #fff);
+  font-weight: 700;
+}
+
+.phase2-cycle-table td.phase2-close-cell {
+  background: color-mix(in srgb, var(--graph-active) 18%, var(--panel));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--graph-active) 48%, transparent);
+}
+
+.phase2-elim-table th {
+  background: color-mix(in srgb, #50565e 85%, var(--panel));
+  color: #f5f7fa;
+  font-weight: 700;
+}
+
+.phase2-elim-table td {
+  background: color-mix(in srgb, var(--panel) 92%, #fff);
+}
+
+.phase2-elim-table td.phase2-pair-cell {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.phase2-status {
+  font-weight: 700;
+}
+
+.phase2-status-done {
+  color: color-mix(in srgb, var(--graph-engaged) 84%, #1d6b49);
+}
+
+.phase2-status-current {
+  color: color-mix(in srgb, var(--graph-active) 86%, #0f5075);
+}
+
+.phase2-status-pending {
+  color: color-mix(in srgb, var(--muted) 82%, #5f6770);
+}
+
+.phase2-elim-table tr.phase2-row-active td {
+  background: color-mix(in srgb, var(--graph-active) 16%, var(--panel));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--graph-active) 38%, transparent);
 }
 
 .graph-head {

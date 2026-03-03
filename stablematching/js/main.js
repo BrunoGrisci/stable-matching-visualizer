@@ -161,6 +161,8 @@
     prefLayoutToggleBtn: document.getElementById('prefLayoutToggleBtn'),
     menPrefTable: document.getElementById('menPrefTable'),
     womenPrefTable: document.getElementById('womenPrefTable'),
+    roomPhase2TraceBox: document.getElementById('roomPhase2TraceBox'),
+    roomPhase2TraceContent: document.getElementById('roomPhase2TraceContent'),
     graphTitle: document.getElementById('graphTitle'),
     graphModeTag: document.getElementById('graphModeTag'),
     matchGraph: document.getElementById('matchGraph'),
@@ -822,6 +824,10 @@
     els.roomDeletionCard.classList.toggle('hidden', !roommates);
     els.roomRotationCard.classList.toggle('hidden', !roommates);
     els.roomOpsCard.classList.toggle('hidden', !roommates);
+    if (!roommates) {
+      els.roomPhase2TraceBox.classList.add('hidden');
+      els.roomPhase2TraceContent.innerHTML = '';
+    }
     els.pairsLabel.textContent = roommates ? t('participants_label') : t('pairs_label');
 
     els.menEditorTableEl.classList.toggle('hide-cap-col', roommates || !showCapMen);
@@ -2295,6 +2301,135 @@
     `;
   }
 
+  function phase2StatusHtml(kind, text) {
+    return `<span class="phase2-status phase2-status-${kind}">${escapeHtml(text)}</span>`;
+  }
+
+  function renderRoomPhase2Trace(snapshot) {
+    if (!els.roomPhase2TraceBox || !els.roomPhase2TraceContent) {
+      return;
+    }
+
+    const inRoommates = Boolean(snapshot && snapshot.problemType === 'roommates');
+    const inPhase2 = inRoommates && String(snapshot.phase || '').startsWith('phase2');
+    const rotation = inPhase2 ? snapshot.rotation : null;
+    const rotP = rotation && Array.isArray(rotation.p) ? rotation.p.slice() : [];
+    const rotY = rotation && Array.isArray(rotation.y) ? rotation.y.slice() : [];
+    const k = Math.min(rotP.length, rotY.length);
+
+    if (!inPhase2 || k <= 0) {
+      els.roomPhase2TraceBox.classList.add('hidden');
+      els.roomPhase2TraceContent.innerHTML = '';
+      return;
+    }
+
+    els.roomPhase2TraceBox.classList.remove('hidden');
+
+    const secondChoices = rotP.map((_, i) => rotY[(i + 1) % k] || '-');
+    const lastEvent = snapshot.lastEvent || {};
+    const rejectIdx = Number.isFinite(rotation.rejectIdx) ? rotation.rejectIdx : 0;
+    const succYIndex = Number.isFinite(rotation.succYIndex) ? rotation.succYIndex : 0;
+
+    let activeRejectIdx = -1;
+    if (lastEvent.key === 'step_room_rotation_reject' && lastEvent.proposer && lastEvent.receiver) {
+      activeRejectIdx = rotP.findIndex((x, i) => x === lastEvent.proposer && rotY[i] === lastEvent.receiver);
+    }
+
+    let activeTrimIdx = -1;
+    if (lastEvent.key === 'step_room_rotation_trim' && lastEvent.participant && lastEvent.pivot) {
+      activeTrimIdx = rotY.findIndex((y, i) => y === lastEvent.participant && rotP[(i - 1 + k) % k] === lastEvent.pivot);
+    }
+
+    const cycleTopCells = [];
+    const cycleBottomCells = [];
+    for (let i = 0; i < k; i += 1) {
+      const activeClass = (i === activeRejectIdx || i === activeTrimIdx) ? ' class="phase2-close-cell"' : '';
+      cycleTopCells.push(`<td${activeClass}>${escapeHtml(rotP[i])}</td>`);
+      cycleBottomCells.push(`<td${activeClass}>${escapeHtml(secondChoices[i])}</td>`);
+    }
+    cycleTopCells.push(`<td class="phase2-close-cell">${escapeHtml(rotP[0])}</td>`);
+    cycleBottomCells.push(`<td class="phase2-close-cell">${escapeHtml(t('room_phase2_cycle_return'))}</td>`);
+
+    const elimRows = [];
+    for (let i = 0; i < k; i += 1) {
+      let rejectKind = 'pending';
+      if (i < rejectIdx) {
+        rejectKind = 'done';
+      }
+      if (i === activeRejectIdx) {
+        rejectKind = 'current';
+      }
+
+      let trimKind = 'pending';
+      if (i < succYIndex) {
+        trimKind = 'done';
+      }
+      if (i === activeTrimIdx) {
+        trimKind = 'current';
+      }
+
+      const rejectText = t(`room_phase2_status_${rejectKind}`);
+      let trimText = t(`room_phase2_status_${trimKind}`);
+      if (trimKind === 'current' && lastEvent.removed) {
+        trimText = t('room_phase2_status_current_removed', { removed: lastEvent.removed });
+      }
+
+      const rowActiveClass = (i === activeRejectIdx || i === activeTrimIdx) ? 'phase2-row-active' : '';
+      elimRows.push(`
+        <tr class="${rowActiveClass}">
+          <td>${i}</td>
+          <td>${escapeHtml(rotP[i])}</td>
+          <td>${escapeHtml(rotY[i])}</td>
+          <td>${escapeHtml(secondChoices[i])}</td>
+          <td class="phase2-pair-cell">${escapeHtml(`(${rotP[i]}, ${rotY[i]})`)}</td>
+          <td>${phase2StatusHtml(rejectKind, rejectText)}</td>
+          <td>${phase2StatusHtml(trimKind, trimText)}</td>
+        </tr>
+      `);
+    }
+
+    els.roomPhase2TraceContent.innerHTML = `
+      <div>
+        <p class="phase2-trace-subtitle">${escapeHtml(t('room_phase2_cycle_title'))}</p>
+        <div class="phase2-cycle-wrap">
+          <table class="phase2-cycle-table">
+            <tbody>
+              <tr>
+                <th>${escapeHtml(t('room_phase2_cycle_top'))}</th>
+                ${cycleTopCells.join('')}
+              </tr>
+              <tr>
+                <th>${escapeHtml(t('room_phase2_cycle_bottom'))}</th>
+                ${cycleBottomCells.join('')}
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div>
+        <p class="phase2-trace-subtitle">${escapeHtml(t('room_phase2_elim_title'))}</p>
+        <div class="phase2-elim-wrap">
+          <table class="phase2-elim-table">
+            <thead>
+              <tr>
+                <th>${escapeHtml(t('room_phase2_col_idx'))}</th>
+                <th>${escapeHtml(t('room_phase2_col_x'))}</th>
+                <th>${escapeHtml(t('room_phase2_col_y'))}</th>
+                <th>${escapeHtml(t('room_phase2_col_second'))}</th>
+                <th>${escapeHtml(t('room_phase2_col_pair'))}</th>
+                <th>${escapeHtml(t('room_phase2_col_reject'))}</th>
+                <th>${escapeHtml(t('room_phase2_col_trim'))}</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${elimRows.join('')}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    `;
+  }
+
   function prefTableHtml(side, names, prefsMap, partnersMap, activeRowName, activeTarget) {
     const maxPrefLen = names.reduce((acc, name) => Math.max(acc, (prefsMap[name] || []).length), 0);
     const sideBySideCols = maxPrefLen <= 12 ? maxPrefLen : 8;
@@ -2383,6 +2518,7 @@
     if (!state.instance || !state.engine) {
       els.menPrefTable.innerHTML = '';
       els.womenPrefTable.innerHTML = '';
+      renderRoomPhase2Trace(null);
       return;
     }
 
@@ -2390,8 +2526,11 @@
     if (snapshot.problemType === 'roommates') {
       els.menPrefTable.innerHTML = roommatesPrefTableHtml(snapshot);
       els.womenPrefTable.innerHTML = '';
+      renderRoomPhase2Trace(snapshot);
       return;
     }
+
+    renderRoomPhase2Trace(null);
 
     const ev = snapshot.lastEvent || {};
     const { menPartners, womenPartners } = buildPartnerMaps(snapshot.pairs);
