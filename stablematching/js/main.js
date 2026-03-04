@@ -19,10 +19,14 @@
     logEntries: [],
     activeTab: 'sim',
     insightsCache: null,
+    roommatesInstanceStableExists: null,
     exhaustedProposers: new Set(),
     recentlySingle: new Set(),
     traits: {},
     prefTablesStacked: false,
+    instabilityDemo: null,
+    randomMatchingSnapshot: null,
+    optimalityStateLimit: 250000,
     optimalityJobToken: 0,
     controlsCollapsed: false,
     codeCollapsed: false,
@@ -126,9 +130,11 @@
 
     loadPresetBtn: document.getElementById('loadPresetBtn'),
     resetRunBtn: document.getElementById('resetRunBtn'),
+    randomPerfectMatchingBtn: document.getElementById('randomPerfectMatchingBtn'),
     runStepBtn: document.getElementById('runStepBtn'),
     autoRunBtn: document.getElementById('autoRunBtn'),
     runFullBtn: document.getElementById('runFullBtn'),
+    findInstabilityBtn: document.getElementById('findInstabilityBtn'),
 
     csvInput: document.getElementById('csvInput'),
     applyTablesBtn: document.getElementById('applyTablesBtn'),
@@ -165,6 +171,7 @@
     roomPhase2TraceContent: document.getElementById('roomPhase2TraceContent'),
     graphTitle: document.getElementById('graphTitle'),
     graphModeTag: document.getElementById('graphModeTag'),
+    instabilityNote: document.getElementById('instabilityNote'),
     matchGraph: document.getElementById('matchGraph'),
     insightsGrid: document.getElementById('insightsGrid'),
 
@@ -252,12 +259,498 @@
     renderStatus();
   }
 
+  function clearInstabilityDemo(render = true) {
+    if (!state.instabilityDemo) {
+      return;
+    }
+    state.instabilityDemo = null;
+    if (render) {
+      renderAll();
+    }
+  }
+
+  function getDisplaySnapshot() {
+    if (state.randomMatchingSnapshot) {
+      return state.randomMatchingSnapshot;
+    }
+    if (!state.engine) {
+      return null;
+    }
+    return state.engine.getSnapshot();
+  }
+
+  function clearRandomMatchingDemo(render = true) {
+    if (!state.randomMatchingSnapshot) {
+      return;
+    }
+    cancelOptimalityJob();
+    state.randomMatchingSnapshot = null;
+    state.insightsCache = null;
+    clearInstabilityDemo(false);
+    if (render) {
+      renderAll();
+    }
+  }
+
+  function shuffleCopy(list) {
+    const arr = Array.isArray(list) ? list.slice() : [];
+    for (let i = arr.length - 1; i > 0; i -= 1) {
+      const j = Math.floor(Math.random() * (i + 1));
+      const tmp = arr[i];
+      arr[i] = arr[j];
+      arr[j] = tmp;
+    }
+    return arr;
+  }
+
+  function pairFromOrientationSide(side, proposer, receiver) {
+    if (side === 'women') {
+      return {
+        man: receiver,
+        woman: proposer,
+        key: `${receiver}|${proposer}`
+      };
+    }
+    return {
+      man: proposer,
+      woman: receiver,
+      key: `${proposer}|${receiver}`
+    };
+  }
+
+  function canonicalRoommatePair(a, b) {
+    if (a <= b) {
+      return {
+        man: a,
+        woman: b,
+        key: `${a}|${b}`
+      };
+    }
+    return {
+      man: b,
+      woman: a,
+      key: `${b}|${a}`
+    };
+  }
+
+  function getSnapshotProposerCapacity(snapshot, proposer) {
+    if (snapshot.capacitySide !== 'proposer') {
+      return 1;
+    }
+    const cap = snapshot.orientation && snapshot.orientation.proposerCaps
+      ? snapshot.orientation.proposerCaps[proposer]
+      : null;
+    return Number.isFinite(cap) ? Math.max(1, cap) : 1;
+  }
+
+  function getSnapshotReceiverCapacity(snapshot, receiver) {
+    if (snapshot.capacitySide !== 'receiver') {
+      return 1;
+    }
+    const cap = snapshot.orientation && snapshot.orientation.receiverCaps
+      ? snapshot.orientation.receiverCaps[receiver]
+      : null;
+    return Number.isFinite(cap) ? Math.max(1, cap) : 1;
+  }
+
+  function buildRandomPerfectRoommatesSnapshot(baseSnapshot) {
+    const names = Array.isArray(baseSnapshot && baseSnapshot.names)
+      ? baseSnapshot.names.slice()
+      : (state.instance && Array.isArray(state.instance.people) ? state.instance.people.slice() : []);
+
+    if (!names.length || (names.length % 2) !== 0) {
+      return null;
+    }
+
+    const shuffled = shuffleCopy(names);
+    const pairs = [];
+    for (let i = 0; i < shuffled.length; i += 2) {
+      if (!shuffled[i + 1]) {
+        return null;
+      }
+      pairs.push(canonicalRoommatePair(shuffled[i], shuffled[i + 1]));
+    }
+    pairs.sort((a, b) => {
+      if (a.man === b.man) {
+        return a.woman.localeCompare(b.woman);
+      }
+      return a.man.localeCompare(b.man);
+    });
+
+    const originalPrefs = {};
+    const reducedPrefs = {};
+    const activeMap = {};
+    const hold = {};
+    const nextIndex = {};
+    const firstChoices = {};
+    const secondChoices = {};
+    const lastChoices = {};
+
+    for (const name of names) {
+      const list = ((state.instance && state.instance.prefs && state.instance.prefs[name]) || []).slice();
+      originalPrefs[name] = list.slice();
+      reducedPrefs[name] = list.slice();
+      activeMap[name] = new Set(list);
+      hold[name] = null;
+      nextIndex[name] = 0;
+      firstChoices[name] = list.length ? list[0] : null;
+      secondChoices[name] = list.length > 1 ? list[1] : null;
+      lastChoices[name] = list.length ? list[list.length - 1] : null;
+    }
+
+    return {
+      problemType: 'roommates',
+      randomMatching: true,
+      done: true,
+      hasStableMatching: true,
+      proposalCount: 0,
+      preferenceDeletionCount: 0,
+      rotationCount: 0,
+      irvingOperationCount: 0,
+      stepCount: 0,
+      lastEvent: {
+        type: 'random_matching',
+        line: 1,
+        key: 'step_initial_roommates'
+      },
+      phase: 'random_matching',
+      names,
+      originalPrefs,
+      reducedPrefs,
+      activeMap,
+      hold,
+      nextIndex,
+      queueRemaining: [],
+      firstChoices,
+      secondChoices,
+      lastChoices,
+      rotation: null,
+      totalPossibleProposals: names.length * Math.max(0, names.length - 1),
+      pairs
+    };
+  }
+
+  function attemptRandomPerfectBipartiteSnapshot(baseSnapshot) {
+    const orientation = baseSnapshot && baseSnapshot.orientation;
+    if (!orientation) {
+      return null;
+    }
+
+    const capacitySide = baseSnapshot.capacitySide || 'receiver';
+    const proposers = orientation.proposers || [];
+    const receivers = orientation.receivers || [];
+    const proposerCaps = {};
+    const receiverCaps = {};
+    let totalProposerCap = 0;
+    let totalReceiverCap = 0;
+
+    for (const proposer of proposers) {
+      const cap = getSnapshotProposerCapacity(baseSnapshot, proposer);
+      proposerCaps[proposer] = cap;
+      totalProposerCap += cap;
+      if (cap > ((orientation.pPrefs[proposer] || []).length)) {
+        return null;
+      }
+    }
+    for (const receiver of receivers) {
+      const cap = getSnapshotReceiverCapacity(baseSnapshot, receiver);
+      receiverCaps[receiver] = cap;
+      totalReceiverCap += cap;
+    }
+
+    if (totalProposerCap !== totalReceiverCap) {
+      return null;
+    }
+
+    const proposerMatch = Object.fromEntries(proposers.map((p) => [p, []]));
+    const receiverMatches = Object.fromEntries(receivers.map((r) => [r, []]));
+    const randomizedPrefs = Object.fromEntries(
+      proposers.map((p) => [p, shuffleCopy(orientation.pPrefs[p] || [])])
+    );
+    const slots = [];
+    for (const proposer of proposers) {
+      for (let i = 0; i < proposerCaps[proposer]; i += 1) {
+        slots.push(proposer);
+      }
+    }
+    const shuffledSlots = shuffleCopy(slots);
+
+    const addPair = (proposer, receiver) => {
+      proposerMatch[proposer].push(receiver);
+      receiverMatches[receiver].push(proposer);
+    };
+
+    const removePair = (proposer, receiver) => {
+      const pList = proposerMatch[proposer];
+      const rList = receiverMatches[receiver];
+      const pIdx = pList.indexOf(receiver);
+      if (pIdx >= 0) {
+        pList.splice(pIdx, 1);
+      }
+      const rIdx = rList.indexOf(proposer);
+      if (rIdx >= 0) {
+        rList.splice(rIdx, 1);
+      }
+    };
+
+    const tryAssign = (proposer, seenProposers, seenReceivers) => {
+      if (seenProposers.has(proposer)) {
+        return false;
+      }
+      seenProposers.add(proposer);
+
+      const prefs = randomizedPrefs[proposer] || [];
+      for (const receiver of prefs) {
+        if (proposerMatch[proposer].includes(receiver)) {
+          continue;
+        }
+        if (seenReceivers.has(receiver)) {
+          continue;
+        }
+        seenReceivers.add(receiver);
+
+        const current = receiverMatches[receiver] || [];
+        if (current.length < (receiverCaps[receiver] || 0)) {
+          addPair(proposer, receiver);
+          return true;
+        }
+
+        const incumbents = shuffleCopy(current);
+        for (const incumbent of incumbents) {
+          removePair(incumbent, receiver);
+          if (tryAssign(incumbent, seenProposers, seenReceivers)) {
+            addPair(proposer, receiver);
+            return true;
+          }
+          addPair(incumbent, receiver);
+        }
+      }
+
+      return false;
+    };
+
+    for (const proposer of shuffledSlots) {
+      const seenProposers = new Set();
+      const seenReceivers = new Set();
+      if (!tryAssign(proposer, seenProposers, seenReceivers)) {
+        return null;
+      }
+    }
+
+    for (const proposer of proposers) {
+      if ((proposerMatch[proposer] || []).length !== proposerCaps[proposer]) {
+        return null;
+      }
+      const rank = orientation.pRank[proposer] || {};
+      proposerMatch[proposer].sort((a, b) => (rank[a] || 0) - (rank[b] || 0));
+    }
+    for (const receiver of receivers) {
+      if ((receiverMatches[receiver] || []).length !== receiverCaps[receiver]) {
+        return null;
+      }
+      const rank = orientation.rRank[receiver] || {};
+      receiverMatches[receiver].sort((a, b) => (rank[a] || 0) - (rank[b] || 0));
+    }
+
+    const side = orientation.side === 'women' ? 'women' : 'men';
+    const pairs = [];
+    for (const proposer of proposers) {
+      for (const receiver of proposerMatch[proposer] || []) {
+        pairs.push(pairFromOrientationSide(side, proposer, receiver));
+      }
+    }
+    pairs.sort((a, b) => {
+      if (a.man === b.man) {
+        return a.woman.localeCompare(b.woman);
+      }
+      return a.man.localeCompare(b.man);
+    });
+
+    const nextIndex = Object.fromEntries(proposers.map((p) => [p, 0]));
+    const engagedTo = capacitySide === 'proposer'
+      ? Object.fromEntries(proposers.map((p) => [p, (proposerMatch[p] || []).slice()]))
+      : Object.fromEntries(receivers.map((r) => [r, (receiverMatches[r] || []).slice()]));
+
+    return {
+      randomMatching: true,
+      done: true,
+      proposalCount: 0,
+      stepCount: 0,
+      lastEvent: {
+        type: 'random_matching',
+        line: 1,
+        key: 'step_initial'
+      },
+      capacitySide,
+      proposerMatch: Object.fromEntries(proposers.map((p) => [p, (proposerMatch[p] || []).slice()])),
+      receiverMatches: Object.fromEntries(receivers.map((r) => [r, (receiverMatches[r] || []).slice()])),
+      pairs,
+      totalPossibleProposals: orientation.totalPossibleProposals,
+      orientation,
+      queueRemaining: [],
+      nextIndex,
+      freeProposers: [],
+      engagedTo
+    };
+  }
+
+  function buildRandomPerfectMatchingSnapshot() {
+    const baseSnapshot = state.engine ? state.engine.getSnapshot() : null;
+    if (!baseSnapshot) {
+      return null;
+    }
+
+    if (baseSnapshot.problemType === 'roommates') {
+      return buildRandomPerfectRoommatesSnapshot(baseSnapshot);
+    }
+
+    const maxAttempts = 8;
+    for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+      const candidate = attemptRandomPerfectBipartiteSnapshot(baseSnapshot);
+      if (candidate) {
+        return candidate;
+      }
+    }
+
+    return null;
+  }
+
+  function computeRoommatesInstanceStability(instance) {
+    if (!instance || instance.problemType !== 'roommates') {
+      return null;
+    }
+    try {
+      const checker = new GSAlgorithms.IrvingEngine(GSAlgorithms.cloneInstance(instance));
+      const finalSnapshot = checker.runToEnd();
+      return Boolean(finalSnapshot && finalSnapshot.hasStableMatching);
+    } catch (error) {
+      return null;
+    }
+  }
+
+  function computeInsightsForSnapshot(snapshot, options = {}) {
+    const randomMatching = Boolean(options.randomMatching);
+    if (!snapshot) {
+      return null;
+    }
+
+    if (snapshot.problemType === 'roommates' && randomMatching && typeof GSAlgorithms.analyzeRoommatesSnapshot === 'function') {
+      return GSAlgorithms.analyzeRoommatesSnapshot(state.instance, {
+        ...snapshot,
+        hasStableMatching: true
+      });
+    }
+
+    const analyzed = GSAlgorithms.analyzeSnapshot(state.instance, state.proposerSide, snapshot);
+    if (randomMatching
+      && analyzed
+      && analyzed.optimality
+      && analyzed.optimality.mode === 'current') {
+      analyzed.optimality = {
+        ...analyzed.optimality,
+        empirical: {
+          mode: 'skipped',
+          reason: 'empirical_reason_not_run',
+          count: 0,
+          statesExplored: 0,
+          proposerOptimal: null,
+          receiverPessimal: null
+        }
+      };
+    }
+    return analyzed;
+  }
+
+  function generateRandomPerfectMatching() {
+    if (!state.instance || !state.engine) {
+      return;
+    }
+    stopAuto(false);
+    clearInstabilityDemo(false);
+
+    const snapshot = buildRandomPerfectMatchingSnapshot();
+    if (!snapshot) {
+      clearRandomMatchingDemo(false);
+      setStatus('status_random_matching_unavailable');
+      renderAll();
+      return;
+    }
+
+    cancelOptimalityJob();
+    state.randomMatchingSnapshot = snapshot;
+    state.insightsCache = computeInsightsForSnapshot(snapshot, { randomMatching: true });
+    setStatus('status_random_matching_loaded');
+    renderAll();
+  }
+
+  function pickRandom(items) {
+    if (!Array.isArray(items) || !items.length) {
+      return null;
+    }
+    const idx = Math.floor(Math.random() * items.length);
+    return items[idx] || null;
+  }
+
+  function rankMapFromPrefs(map, names) {
+    const out = {};
+    for (const name of names || []) {
+      const rank = {};
+      const list = (map && map[name]) || [];
+      for (let i = 0; i < list.length; i += 1) {
+        rank[list[i]] = i;
+      }
+      out[name] = rank;
+    }
+    return out;
+  }
+
+  function getActiveInstabilityDemo(kind = null) {
+    const demo = state.instabilityDemo;
+    if (!demo || !demo.found) {
+      return null;
+    }
+    if (kind && demo.kind !== kind) {
+      return null;
+    }
+    return demo;
+  }
+
+  function instabilityNoteText(demo = state.instabilityDemo) {
+    if (!demo) {
+      return '';
+    }
+    if (!demo.found) {
+      return t('instability_none_msg');
+    }
+    return t('instability_example_msg', {
+      a: demo.a,
+      b: demo.b,
+      aPartner: demo.aPartner,
+      bPartner: demo.bPartner
+    });
+  }
+
   function readNumberInput(inputEl, fallback, min, max) {
     const parsed = Number.parseInt(String(inputEl.value || ''), 10);
     const safe = Number.isFinite(parsed) ? parsed : fallback;
     const clamped = clamp(safe, min, max);
     inputEl.value = String(clamped);
     return clamped;
+  }
+
+  function readParticipantsInput(variant = state.variant, fallback = 5, max = 2000) {
+    const min = isRoommatesVariant(variant) ? 2 : 1;
+    const n = readNumberInput(els.pairsInput, fallback, min, max);
+    if (!isRoommatesVariant(variant)) {
+      return n;
+    }
+    if ((n % 2) === 0) {
+      return n;
+    }
+    const up = n + 1;
+    const even = up <= max ? up : Math.max(min, n - 1);
+    els.pairsInput.value = String(even);
+    return even;
   }
 
   function syncForbiddenCountBounds(maxPairs) {
@@ -516,6 +1009,12 @@
     state.optimalityJobToken += 1;
   }
 
+  function normalizeOptimalityStateLimit(value, fallback = 250000) {
+    const parsed = Number.parseInt(String(value == null ? '' : value), 10);
+    const safe = Number.isFinite(parsed) ? parsed : fallback;
+    return clamp(safe, 1, 100000000);
+  }
+
   function applyEmpiricalOptimalityStatus(status) {
     if (!state.insightsCache || !state.insightsCache.optimality) {
       return;
@@ -533,7 +1032,7 @@
     }
   }
 
-  function startOptimalityEmpiricalComputation(snapshot) {
+  function startOptimalityEmpiricalComputation(snapshot, options = {}) {
     if (!snapshot || !snapshot.done || !state.insightsCache || !state.insightsCache.optimality) {
       return;
     }
@@ -542,14 +1041,21 @@
       return;
     }
 
+    const force = Boolean(options.force);
     const empirical = optimality.empirical || {};
-    if (empirical.mode === 'checked' || empirical.mode === 'skipped') {
+    if (!force && (empirical.mode === 'checked' || empirical.mode === 'skipped')) {
       return;
     }
 
+    const maxStates = normalizeOptimalityStateLimit(
+      options.maxStates,
+      normalizeOptimalityStateLimit(state.optimalityStateLimit, 250000)
+    );
+    state.optimalityStateLimit = maxStates;
+
     cancelOptimalityJob();
     const jobToken = state.optimalityJobToken;
-    const enumerator = GSAlgorithms.createEmpiricalOptimalityEnumerator(state.instance, snapshot);
+    const enumerator = GSAlgorithms.createEmpiricalOptimalityEnumerator(state.instance, snapshot, { maxStates });
 
     const initialStatus = enumerator.getStatus();
     applyEmpiricalOptimalityStatus(initialStatus);
@@ -570,6 +1076,87 @@
     };
 
     requestAnimationFrame(stepLoop);
+  }
+
+  function stopOptimalityEmpiricalComputationByUser() {
+    const optimality = state.insightsCache && state.insightsCache.optimality ? state.insightsCache.optimality : null;
+    const empirical = optimality && optimality.empirical ? optimality.empirical : null;
+    const wasRunning = Boolean(empirical && empirical.mode === 'running');
+    cancelOptimalityJob();
+    if (!wasRunning) {
+      return;
+    }
+    applyEmpiricalOptimalityStatus({
+      mode: 'skipped',
+      reason: 'empirical_reason_cancelled',
+      count: Number.isFinite(empirical.count) ? empirical.count : 0,
+      statesExplored: Number.isFinite(empirical.statesExplored) ? empirical.statesExplored : 0,
+      proposerOptimal: null,
+      receiverPessimal: null
+    });
+    renderInsights();
+  }
+
+  function runOptimalityEmpiricalComputationFromInsight() {
+    const snapshot = getDisplaySnapshot();
+    if (!snapshot || snapshot.problemType === 'roommates' || !snapshot.done) {
+      return;
+    }
+    const randomMatchingMode = Boolean(state.randomMatchingSnapshot && snapshot.randomMatching);
+    if (randomMatchingMode) {
+      return;
+    }
+    state.insightsCache = computeInsightsForSnapshot(snapshot, { randomMatching: randomMatchingMode });
+    const optimality = state.insightsCache && state.insightsCache.optimality ? state.insightsCache.optimality : null;
+    const empirical = optimality && optimality.empirical ? optimality.empirical : null;
+    if (!optimality || optimality.mode !== 'current') {
+      renderInsights();
+      return;
+    }
+    if (empirical && empirical.mode === 'skipped' && empirical.reason === 'empirical_reason_unstable_output') {
+      renderInsights();
+      return;
+    }
+    startOptimalityEmpiricalComputation(snapshot, {
+      force: true,
+      maxStates: state.optimalityStateLimit
+    });
+  }
+
+  function optimalityInsightControlsHtml(insight, snapshot, randomMatchingMode) {
+    if (!snapshot || !snapshot.done || snapshot.problemType === 'roommates') {
+      return '';
+    }
+    const optimality = insight && insight.optimality ? insight.optimality : null;
+    if (!optimality || optimality.mode !== 'current') {
+      return '';
+    }
+
+    const empirical = optimality.empirical || {};
+    const running = empirical.mode === 'running';
+    const blockedByUnstable = empirical.mode === 'skipped' && empirical.reason === 'empirical_reason_unstable_output';
+    const canRun = !randomMatchingMode && !blockedByUnstable;
+    const action = running ? 'cancel' : 'run';
+    const buttonLabel = running ? t('insight_optimal_cancel_btn') : t('insight_optimal_run_btn');
+    const disabledAttr = (!running && !canRun) ? ' disabled' : '';
+
+    return `
+      <div class="insight-controls">
+        <label class="insight-limit-control">
+          <span>${escapeHtml(t('insight_optimal_limit_label'))}</span>
+          <input
+            id="optimalityStateLimitInput"
+            data-optimality-limit="1"
+            type="number"
+            min="1"
+            max="100000000"
+            step="1"
+            value="${escapeHtml(String(normalizeOptimalityStateLimit(state.optimalityStateLimit, 250000)))}"
+          >
+        </label>
+        <button class="secondary" data-optimality-action="${action}"${disabledAttr}>${escapeHtml(buttonLabel)}</button>
+      </div>
+    `;
   }
 
   function updateToggleButtons() {
@@ -790,7 +1377,7 @@
     const variant = els.variantSelect.value;
     updatePresetAvailability();
     const preset = els.presetSelect.value;
-    const n = readNumberInput(els.pairsInput, 5, 2, 2000);
+    const n = readParticipantsInput(variant, 5, 2000);
 
     const nDrivenPresets = new Set(['random', 'inverse', 'easy', 'worst_case_demo']);
     const roommates = isRoommatesVariant(variant);
@@ -829,6 +1416,8 @@
       els.roomPhase2TraceContent.innerHTML = '';
     }
     els.pairsLabel.textContent = roommates ? t('participants_label') : t('pairs_label');
+    els.pairsInput.min = roommates ? '2' : '1';
+    els.pairsInput.step = roommates ? '2' : '1';
 
     els.menEditorTableEl.classList.toggle('hide-cap-col', roommates || !showCapMen);
     els.womenEditorTableEl.classList.toggle('hide-cap-col', !showCapWomen);
@@ -970,6 +1559,233 @@
       return isForbiddenPair(name, candidate);
     }
     return isForbiddenPair(candidate, name);
+  }
+
+  function findBipartiteInstabilityExample(snapshot) {
+    if (!state.instance || !snapshot) {
+      return null;
+    }
+
+    const men = state.instance.men || [];
+    const women = state.instance.women || [];
+    const { menPartners, womenPartners } = buildPartnerMaps(snapshot.pairs || []);
+    const menRanks = rankMapFromPrefs(state.instance.mPrefs, men);
+    const womenRanks = rankMapFromPrefs(state.instance.wPrefs, women);
+    const examples = [];
+
+    for (const man of men) {
+      const currentWomen = menPartners[man] || [];
+      if (!currentWomen.length) {
+        continue;
+      }
+      const manRank = menRanks[man] || {};
+
+      for (const woman of women) {
+        if (currentWomen.includes(woman)) {
+          continue;
+        }
+        if (state.variant === 'forbidden' && isForbiddenPair(man, woman)) {
+          continue;
+        }
+
+        const manToWoman = manRank[woman];
+        if (!Number.isFinite(manToWoman)) {
+          continue;
+        }
+
+        let manPartner = null;
+        let manPartnerRank = -1;
+        for (const wCur of currentWomen) {
+          const curRank = manRank[wCur];
+          if (Number.isFinite(curRank) && curRank > manToWoman && curRank > manPartnerRank) {
+            manPartnerRank = curRank;
+            manPartner = wCur;
+          }
+        }
+        if (!manPartner) {
+          continue;
+        }
+
+        const currentMen = womenPartners[woman] || [];
+        if (!currentMen.length) {
+          continue;
+        }
+        const womanRank = womenRanks[woman] || {};
+        const womanToMan = womanRank[man];
+        if (!Number.isFinite(womanToMan)) {
+          continue;
+        }
+
+        let womanPartner = null;
+        let womanPartnerRank = -1;
+        for (const mCur of currentMen) {
+          const curRank = womanRank[mCur];
+          if (Number.isFinite(curRank) && curRank > womanToMan && curRank > womanPartnerRank) {
+            womanPartnerRank = curRank;
+            womanPartner = mCur;
+          }
+        }
+        if (!womanPartner) {
+          continue;
+        }
+
+        examples.push({
+          found: true,
+          kind: 'bipartite',
+          a: man,
+          b: woman,
+          aPartner: manPartner,
+          bPartner: womanPartner
+        });
+      }
+    }
+
+    return pickRandom(examples);
+  }
+
+  function findRoommatesInstabilityExample(snapshot) {
+    if (!snapshot || snapshot.problemType !== 'roommates') {
+      return null;
+    }
+
+    const names = snapshot.names || [];
+    const partner = {};
+    for (const pair of snapshot.pairs || []) {
+      partner[pair.man] = pair.woman;
+      partner[pair.woman] = pair.man;
+    }
+
+    const sourcePrefs = snapshot.originalPrefs || (state.instance && state.instance.prefs) || {};
+    const rank = rankMapFromPrefs(sourcePrefs, names);
+    const examples = [];
+
+    for (let i = 0; i < names.length; i += 1) {
+      for (let j = i + 1; j < names.length; j += 1) {
+        const a = names[i];
+        const b = names[j];
+        const aPartner = partner[a];
+        const bPartner = partner[b];
+
+        if (!aPartner || !bPartner) {
+          continue;
+        }
+        if (aPartner === b) {
+          continue;
+        }
+
+        const aRank = rank[a] || {};
+        const bRank = rank[b] || {};
+        const aToB = aRank[b];
+        const aToPartner = aRank[aPartner];
+        const bToA = bRank[a];
+        const bToPartner = bRank[bPartner];
+        if (!Number.isFinite(aToB) || !Number.isFinite(aToPartner) || !Number.isFinite(bToA) || !Number.isFinite(bToPartner)) {
+          continue;
+        }
+
+        if (aToB < aToPartner && bToA < bToPartner) {
+          examples.push({
+            found: true,
+            kind: 'roommates',
+            a,
+            b,
+            aPartner,
+            bPartner
+          });
+        }
+      }
+    }
+
+    return pickRandom(examples);
+  }
+
+  function findInstabilityDemoForCurrentSnapshot() {
+    if (!state.instance) {
+      return {
+        found: false,
+        kind: 'none'
+      };
+    }
+
+    const snapshot = getDisplaySnapshot();
+    if (!snapshot) {
+      return {
+        found: false,
+        kind: 'none'
+      };
+    }
+    const found = snapshot.problemType === 'roommates'
+      ? findRoommatesInstabilityExample(snapshot)
+      : findBipartiteInstabilityExample(snapshot);
+
+    if (found) {
+      return found;
+    }
+
+    return {
+      found: false,
+      kind: snapshot.problemType === 'roommates' ? 'roommates' : 'bipartite'
+    };
+  }
+
+  function runFindInstabilityDemo() {
+    state.instabilityDemo = findInstabilityDemoForCurrentSnapshot();
+    renderAll();
+  }
+
+  function isBipartiteInstabilityActor(side, name, demo) {
+    if (!demo || demo.kind !== 'bipartite') {
+      return false;
+    }
+    if (side === 'men') {
+      return name === demo.a || name === demo.bPartner;
+    }
+    return name === demo.b || name === demo.aPartner;
+  }
+
+  function bipartiteInstabilityCellType(side, name, candidate, demo) {
+    if (!demo || demo.kind !== 'bipartite') {
+      return '';
+    }
+    if (side === 'men') {
+      if (name === demo.a && candidate === demo.b) {
+        return 'blocking';
+      }
+      if ((name === demo.a && candidate === demo.aPartner) || (name === demo.bPartner && candidate === demo.b)) {
+        return 'current';
+      }
+      return '';
+    }
+    if (name === demo.b && candidate === demo.a) {
+      return 'blocking';
+    }
+    if ((name === demo.b && candidate === demo.bPartner) || (name === demo.aPartner && candidate === demo.a)) {
+      return 'current';
+    }
+    return '';
+  }
+
+  function isRoommatesInstabilityActor(name, demo) {
+    if (!demo || demo.kind !== 'roommates') {
+      return false;
+    }
+    return name === demo.a || name === demo.b || name === demo.aPartner || name === demo.bPartner;
+  }
+
+  function roommatesInstabilityCellType(name, candidate, demo) {
+    if (!demo || demo.kind !== 'roommates') {
+      return '';
+    }
+    if ((name === demo.a && candidate === demo.b) || (name === demo.b && candidate === demo.a)) {
+      return 'blocking';
+    }
+    if ((name === demo.a && candidate === demo.aPartner)
+      || (name === demo.aPartner && candidate === demo.a)
+      || (name === demo.b && candidate === demo.bPartner)
+      || (name === demo.bPartner && candidate === demo.b)) {
+      return 'current';
+    }
+    return '';
   }
 
   function graphClothesColor(side, name, isExhausted) {
@@ -1302,7 +2118,7 @@
 
   function getBasePresetInstance() {
     const preset = state.preset;
-    const n = readNumberInput(els.pairsInput, 5, 2, 2000);
+    const n = readParticipantsInput(state.variant, 5, 2000);
 
     if (isRoommatesVariant(state.variant)) {
       if (preset === 'room_wiki') {
@@ -1364,7 +2180,7 @@
       });
     }
 
-    const n = readNumberInput(els.pairsInput, 5, 2, 2000);
+    const n = readParticipantsInput(state.variant, 5, 2000);
     const k = readNumberInput(els.goodCountInput, Math.max(1, Math.floor(n / 2)), 1, Math.max(1, n - 1));
 
     let instance;
@@ -1388,6 +2204,7 @@
 
   function loadFromControls(statusKey = 'status_loaded') {
     try {
+      clearInstabilityDemo();
       const instance = buildInstanceFromControls();
       loadInstance(instance, statusKey);
       return true;
@@ -1429,6 +2246,8 @@
 
   function initializeEngine() {
     cancelOptimalityJob();
+    clearInstabilityDemo(false);
+    state.randomMatchingSnapshot = null;
     state.engine = createEngine(state.instance, state.proposerSide);
     let initialLogKey = 'step_initial';
     if (state.instance && state.instance.problemType === 'roommates') {
@@ -1447,6 +2266,7 @@
   function loadInstance(instance, statusKey = 'status_loaded') {
     syncVariantWithInstance(instance);
     state.instance = GSAlgorithms.cloneInstance(instance);
+    state.roommatesInstanceStableExists = computeRoommatesInstanceStability(state.instance);
     generateTraits(state.instance);
     fillEditors(state.instance);
     initializeEngine();
@@ -1593,9 +2413,15 @@
     if (!state.engine) {
       return;
     }
+    const hadRandomMatching = Boolean(state.randomMatchingSnapshot);
+    clearRandomMatchingDemo(false);
+    clearInstabilityDemo(false);
 
     const event = state.engine.step();
     if (!event) {
+      if (hadRandomMatching) {
+        renderAll();
+      }
       return;
     }
 
@@ -1628,7 +2454,6 @@
       stopAuto(false);
       const doneSnapshot = state.engine.getSnapshot();
       state.insightsCache = GSAlgorithms.analyzeSnapshot(state.instance, state.proposerSide, doneSnapshot);
-      startOptimalityEmpiricalComputation(doneSnapshot);
       setStatus(doneSnapshot.hasStableMatching === false ? 'status_finished_no_solution' : 'status_finished');
     } else if (state.autoTimer) {
       setStatus('status_running');
@@ -1640,9 +2465,18 @@
   }
 
   function runFull() {
-    if (!state.engine || state.engine.done) {
+    if (!state.engine) {
       return;
     }
+    const hadRandomMatching = Boolean(state.randomMatchingSnapshot);
+    clearRandomMatchingDemo(false);
+    if (state.engine.done) {
+      if (hadRandomMatching) {
+        renderAll();
+      }
+      return;
+    }
+    clearInstabilityDemo(false);
 
     stopAuto(false);
     state.engine.runToEnd();
@@ -1668,7 +2502,6 @@
     const finishKey = snapshot.hasStableMatching === false ? 'status_finished_no_solution' : 'status_full';
     state.logEntries.push(t(finishKey));
     state.insightsCache = GSAlgorithms.analyzeSnapshot(state.instance, state.proposerSide, snapshot);
-    startOptimalityEmpiricalComputation(snapshot);
     setStatus(finishKey);
     renderAll();
   }
@@ -1691,9 +2524,18 @@
   }
 
   function toggleAuto() {
-    if (!state.engine || state.engine.done) {
+    if (!state.engine) {
       return;
     }
+    const hadRandomMatching = Boolean(state.randomMatchingSnapshot);
+    clearRandomMatchingDemo(false);
+    if (state.engine.done) {
+      if (hadRandomMatching) {
+        renderAll();
+      }
+      return;
+    }
+    clearInstabilityDemo(false);
 
     if (state.autoTimer) {
       stopAuto(true);
@@ -1719,12 +2561,44 @@
     els.statusBar.textContent = state.statusMessage || '';
   }
 
-  function renderCounters() {
-    if (!state.engine || !state.instance) {
+  function renderInstabilityNote() {
+    if (!els.instabilityNote) {
       return;
     }
+    const demo = state.instabilityDemo;
+    if (!demo) {
+      els.instabilityNote.textContent = '';
+      els.instabilityNote.classList.add('hidden');
+      els.instabilityNote.classList.remove('warn');
+      return;
+    }
+    els.instabilityNote.textContent = instabilityNoteText(demo);
+    els.instabilityNote.classList.remove('hidden');
+    els.instabilityNote.classList.toggle('warn', !demo.found);
+  }
 
-    const snapshot = state.engine.getSnapshot();
+  function renderCounters() {
+    if (!state.engine || !state.instance) {
+      if (els.findInstabilityBtn) {
+        els.findInstabilityBtn.disabled = true;
+      }
+      if (els.randomPerfectMatchingBtn) {
+        els.randomPerfectMatchingBtn.disabled = true;
+      }
+      return;
+    }
+    if (els.findInstabilityBtn) {
+      els.findInstabilityBtn.disabled = false;
+    }
+    if (els.randomPerfectMatchingBtn) {
+      els.randomPerfectMatchingBtn.disabled = false;
+    }
+
+    const snapshot = getDisplaySnapshot();
+    if (!snapshot) {
+      return;
+    }
+    const done = state.randomMatchingSnapshot ? Boolean(state.engine.done) : Boolean(snapshot.done);
 
     if (state.instance.problemType === 'roommates') {
       const n = state.instance.people.length;
@@ -1743,7 +2617,6 @@
       els.singleMenCount.textContent = String(singles);
       els.singleWomenCount.textContent = '0';
 
-      const done = Boolean(snapshot.done);
       els.runStepBtn.disabled = done;
       els.autoRunBtn.disabled = done;
       els.runFullBtn.disabled = done;
@@ -1765,7 +2638,6 @@
     els.singleMenCount.textContent = String(Math.max(0, state.instance.men.length - menMatched.size));
     els.singleWomenCount.textContent = String(Math.max(0, state.instance.women.length - womenMatched.size));
 
-    const done = snapshot.done;
     els.runStepBtn.disabled = done;
     els.autoRunBtn.disabled = done;
     els.runFullBtn.disabled = done;
@@ -1900,7 +2772,11 @@
       return;
     }
 
-    const snapshot = state.engine.getSnapshot();
+    const snapshot = getDisplaySnapshot();
+    if (!snapshot) {
+      els.dsDisplay.innerHTML = '';
+      return;
+    }
     if (snapshot.problemType === 'roommates') {
       const names = snapshot.names || [];
       const rowLimit = 260;
@@ -2240,9 +3116,7 @@
   function roommatesPrefTableHtml(snapshot) {
     const names = snapshot.names || [];
     const maxPrefLen = names.reduce((acc, name) => Math.max(acc, (snapshot.originalPrefs[name] || []).length), 0);
-    const maxCols = state.prefTablesStacked
-      ? (maxPrefLen <= 24 ? maxPrefLen : 24)
-      : (maxPrefLen <= 12 ? maxPrefLen : 12);
+    const maxCols = maxPrefLen;
     const headerCols = [];
     for (let i = 0; i < maxCols; i += 1) {
       headerCols.push(`<th>${escapeHtml(rankHeaderLabel(i))}</th>`);
@@ -2251,6 +3125,7 @@
     const { partnerLists } = buildRoommatesLiveLinks(snapshot);
     const ev = snapshot.lastEvent || {};
     const activeNames = new Set([ev.proposer, ev.receiver, ev.participant, ev.removed, ev.pivot].filter(Boolean));
+    const instability = getActiveInstabilityDemo('roommates');
 
     const rows = names.map((name) => {
       const original = snapshot.originalPrefs[name] || [];
@@ -2259,7 +3134,13 @@
       const partnerCount = partners.size;
       const recentlySingle = state.recentlySingle.has(name) && partnerCount === 0;
       const marker = tableStatusMarkerHtml('men', name, partnerCount, recentlySingle);
-      const rowClass = activeNames.has(name) ? 'active-row' : '';
+      const rowClasses = [];
+      if (activeNames.has(name)) {
+        rowClasses.push('active-row');
+      }
+      if (isRoommatesInstabilityActor(name, instability)) {
+        rowClasses.push('instability-row');
+      }
       const prefCells = [];
       for (let i = 0; i < maxCols; i += 1) {
         const candidate = original[i];
@@ -2278,11 +3159,24 @@
         if ((ev.proposer === name && ev.receiver === candidate) || (ev.participant === name && ev.removed === candidate)) {
           classes.push('proposed');
         }
+        const instabilityType = roommatesInstabilityCellType(name, candidate, instability);
+        if (instabilityType === 'blocking') {
+          classes.push('instability-blocking');
+        } else if (instabilityType === 'current') {
+          classes.push('instability-current');
+        }
         prefCells.push(`<td class="${classes.join(' ')}">${escapeHtml(candidate)}</td>`);
       }
+      const nameClasses = ['name-cell'];
+      if (partnerCount > 0) {
+        nameClasses.push('engaged');
+      }
+      if (isRoommatesInstabilityActor(name, instability)) {
+        nameClasses.push('instability-actor');
+      }
       return `
-        <tr class="${rowClass}">
-          <td class="name-cell${partnerCount > 0 ? ' engaged' : ''}">${escapeHtml(name)}${marker ? ` ${marker}` : ''}</td>
+        <tr class="${rowClasses.join(' ')}">
+          <td class="${nameClasses.join(' ')}">${escapeHtml(name)}${marker ? ` ${marker}` : ''}</td>
           ${prefCells.join('')}
         </tr>
       `;
@@ -2432,9 +3326,7 @@
 
   function prefTableHtml(side, names, prefsMap, partnersMap, activeRowName, activeTarget) {
     const maxPrefLen = names.reduce((acc, name) => Math.max(acc, (prefsMap[name] || []).length), 0);
-    const sideBySideCols = maxPrefLen <= 12 ? maxPrefLen : 8;
-    const stackedCols = maxPrefLen <= 24 ? maxPrefLen : 24;
-    const maxCols = state.prefTablesStacked ? stackedCols : sideBySideCols;
+    const maxCols = maxPrefLen;
 
     const headerCols = [];
     for (let i = 0; i < maxCols; i += 1) {
@@ -2443,9 +3335,16 @@
 
     const rows = names
       .map((name) => {
+        const instability = getActiveInstabilityDemo('bipartite');
         const prefList = prefsMap[name] || [];
         const partners = new Set(partnersMap[name] || []);
-        const rowClass = name === activeRowName ? 'active-row' : '';
+        const rowClasses = [];
+        if (name === activeRowName) {
+          rowClasses.push('active-row');
+        }
+        if (isBipartiteInstabilityActor(side, name, instability)) {
+          rowClasses.push('instability-row');
+        }
         const rowCategory = personCategory(side, name);
         const displaced = state.recentlySingle.has(name);
         const becameSingle = displaced && ((state.variant === 'capacity' && side === 'men') || partners.size === 0);
@@ -2477,6 +3376,12 @@
           if (name === activeRowName && candidate === activeTarget) {
             classes.push('proposed');
           }
+          const instabilityType = bipartiteInstabilityCellType(side, name, candidate, instability);
+          if (instabilityType === 'blocking') {
+            classes.push('instability-blocking');
+          } else if (instabilityType === 'current') {
+            classes.push('instability-current');
+          }
           prefCells.push(`<td class="${classes.join(' ')}">${escapeHtml(candidate)}</td>`);
         }
 
@@ -2487,9 +3392,12 @@
         if (partners.size > 0) {
           nameCellClasses.push('engaged');
         }
+        if (isBipartiteInstabilityActor(side, name, instability)) {
+          nameCellClasses.push('instability-actor');
+        }
 
         return `
-          <tr class="${rowClass}">
+          <tr class="${rowClasses.join(' ')}">
             <td class="${nameCellClasses.join(' ')}">${escapeHtml(name)}${marker ? ` ${marker}` : ''}</td>
             ${prefCells.join('')}
           </tr>
@@ -2522,7 +3430,13 @@
       return;
     }
 
-    const snapshot = state.engine.getSnapshot();
+    const snapshot = getDisplaySnapshot();
+    if (!snapshot) {
+      els.menPrefTable.innerHTML = '';
+      els.womenPrefTable.innerHTML = '';
+      renderRoomPhase2Trace(null);
+      return;
+    }
     if (snapshot.problemType === 'roommates') {
       els.menPrefTable.innerHTML = roommatesPrefTableHtml(snapshot);
       els.womenPrefTable.innerHTML = '';
@@ -2684,7 +3598,11 @@
       return;
     }
 
-    const snapshot = state.engine.getSnapshot();
+    const snapshot = getDisplaySnapshot();
+    if (!snapshot) {
+      els.matchGraph.innerHTML = '';
+      return;
+    }
     const orientation = snapshot.orientation;
     const ev = snapshot.lastEvent || {};
 
@@ -2776,6 +3694,24 @@
         engagedEdges.push(`<line class="graph-room-engaged" x1="${from.x}" y1="${from.y}" x2="${to.x}" y2="${to.y}"></line>`);
       }
 
+      const instability = getActiveInstabilityDemo('roommates');
+      const instabilityEdges = [];
+      if (instability) {
+        const instabilitySegments = [
+          { from: instability.a, to: instability.aPartner, cls: 'graph-instability-current' },
+          { from: instability.b, to: instability.bPartner, cls: 'graph-instability-current' },
+          { from: instability.a, to: instability.b, cls: 'graph-instability-blocking' }
+        ];
+        for (const seg of instabilitySegments) {
+          const from = coords[seg.from];
+          const to = coords[seg.to];
+          if (!from || !to || seg.from === seg.to) {
+            continue;
+          }
+          instabilityEdges.push(`<line class="${seg.cls}" x1="${from.x}" y1="${from.y}" x2="${to.x}" y2="${to.y}"></line>`);
+        }
+      }
+
       let activeEdge = '';
       if (ev.proposer && ev.receiver && coords[ev.proposer] && coords[ev.receiver]) {
         const from = coords[ev.proposer];
@@ -2812,7 +3748,7 @@
         `;
       }).join('');
 
-      els.matchGraph.innerHTML = `${edgeLines.join('')}${engagedEdges.join('')}${activeEdge}${nodes}`;
+      els.matchGraph.innerHTML = `${edgeLines.join('')}${engagedEdges.join('')}${instabilityEdges.join('')}${activeEdge}${nodes}`;
       return;
     }
 
@@ -2910,6 +3846,24 @@
       })
       .join('');
 
+    const instability = getActiveInstabilityDemo('bipartite');
+    const instabilityEdges = [];
+    if (instability) {
+      const instabilitySegments = [
+        { from: instability.a, to: instability.aPartner, cls: 'graph-instability-current' },
+        { from: instability.bPartner, to: instability.b, cls: 'graph-instability-current' },
+        { from: instability.a, to: instability.b, cls: 'graph-instability-blocking' }
+      ];
+      for (const seg of instabilitySegments) {
+        const from = menCoords[seg.from];
+        const to = womenCoords[seg.to];
+        if (!from || !to || seg.from === seg.to) {
+          continue;
+        }
+        instabilityEdges.push(`<line class="${seg.cls}" x1="${from.x}" y1="${from.y}" x2="${to.x}" y2="${to.y}"></line>`);
+      }
+    }
+
     let activeEdge = '';
     if (ev.proposer && ev.receiver) {
       const from = state.proposerSide === 'men' ? menCoords[ev.proposer] : womenCoords[ev.proposer];
@@ -2979,7 +3933,7 @@
       <text class="graph-side-title" x="${width - 88}" y="${titleY}" text-anchor="end">${escapeHtml(state.groupNames.women)}</text>
     `;
 
-    els.matchGraph.innerHTML = `${defs}${forbiddenEdges.join('')}${edgeLines.join('')}${engagedEdges}${activeEdge}${sideTitles}${menNodes}${womenNodes}`;
+    els.matchGraph.innerHTML = `${defs}${forbiddenEdges.join('')}${edgeLines.join('')}${engagedEdges}${instabilityEdges.join('')}${activeEdge}${sideTitles}${menNodes}${womenNodes}`;
   }
 
   function renderInsights() {
@@ -2988,10 +3942,16 @@
       return;
     }
 
-    const snapshot = state.engine.getSnapshot();
+    const snapshot = getDisplaySnapshot();
+    if (!snapshot) {
+      els.insightsGrid.innerHTML = '';
+      return;
+    }
+    const randomMatchingMode = Boolean(state.randomMatchingSnapshot && snapshot.randomMatching);
+
     if (snapshot.problemType === 'roommates') {
       if (snapshot.done && !state.insightsCache) {
-        state.insightsCache = GSAlgorithms.analyzeSnapshot(state.instance, state.proposerSide, snapshot);
+        state.insightsCache = computeInsightsForSnapshot(snapshot, { randomMatching: randomMatchingMode });
       }
       if (!snapshot.done || !state.insightsCache) {
         const pendingCards = [
@@ -3005,23 +3965,28 @@
       }
 
       const insight = state.insightsCache;
-      const stable = insight.hasStableMatching && insight.instabilityCount === 0;
+      const stable = insight.instabilityCount === 0;
+      const stableText = stable
+        ? t('insight_true')
+        : `${t('insight_false')} (${Number.isFinite(insight.instabilityCount) ? insight.instabilityCount : '?'})`;
+      const exists = typeof state.roommatesInstanceStableExists === 'boolean'
+        ? state.roommatesInstanceStableExists
+        : Boolean(insight.hasStableMatching);
       const cards = [
         insightCardHtml(insight.perfect ? 'good' : 'bad', t('insight_perfect_title'), insight.perfect ? t('insight_true') : t('insight_false')),
-        insightCardHtml(stable ? 'good' : 'bad', t('insight_stable_title'), stable ? t('insight_true') : t('insight_false')),
+        insightCardHtml(stable ? 'good' : 'bad', t('insight_stable_title'), stableText),
         insightCardHtml(insight.terminatesWithinBound ? 'good' : 'bad', t('insight_terminates_title'), t('insight_termination_value', {
           used: insight.usedProposals,
           bound: insight.terminationBound
         })),
-        insightCardHtml(insight.hasStableMatching ? 'good' : 'bad', t('insight_exists_title'), insight.hasStableMatching ? t('insight_true') : t('insight_false'))
+        insightCardHtml(exists ? 'good' : 'bad', t('insight_exists_title'), exists ? t('insight_true') : t('insight_false'))
       ];
       els.insightsGrid.innerHTML = cards.join('');
       return;
     }
 
     if (snapshot.done && !state.insightsCache) {
-      state.insightsCache = GSAlgorithms.analyzeSnapshot(state.instance, state.proposerSide, snapshot);
-      startOptimalityEmpiricalComputation(snapshot);
+      state.insightsCache = computeInsightsForSnapshot(snapshot, { randomMatching: randomMatchingMode });
     }
 
     const showGoodBadInsight = state.variant === 'good_bad';
@@ -3065,8 +4030,13 @@
     if (insight.optimality.mode === 'current') {
       const empiricalMode = empirical && empirical.mode ? empirical.mode : 'pending';
 
-      if (empiricalMode === 'running' || empiricalMode === 'pending') {
+      if (empiricalMode === 'running') {
         optimalText = t('insight_optimal_computing');
+        optimalClass = 'neutral';
+      } else if (empiricalMode === 'pending') {
+        optimalText = t('insight_optimal_empirical_skipped', {
+          reason: t('empirical_reason_not_run')
+        });
         optimalClass = 'neutral';
       } else if (empiricalMode === 'skipped') {
         optimalText = t('insight_optimal_empirical_skipped', {
@@ -3091,12 +4061,13 @@
         }
       }
     }
+    const optimalControls = optimalityInsightControlsHtml(insight, snapshot, randomMatchingMode);
 
     const cards = [
       insightCardHtml(insight.perfect ? 'good' : 'bad', t('insight_perfect_title'), perfectText),
       insightCardHtml(insight.instabilityCount === 0 ? 'good' : 'bad', t('insight_stable_title'), stableText),
       insightCardHtml(insight.terminatesWithinBound ? 'good' : 'bad', t('insight_terminates_title'), termText),
-      insightCardHtml(optimalClass, t('insight_optimal_title'), optimalText, optimalMeta)
+      insightCardHtml(optimalClass, t('insight_optimal_title'), optimalText, optimalMeta, optimalControls)
     ];
 
     if (showGoodBadInsight) {
@@ -3120,12 +4091,13 @@
     els.insightsGrid.innerHTML = cards.join('');
   }
 
-  function insightCardHtml(type, title, value, meta = '') {
+  function insightCardHtml(type, title, value, meta = '', controlsHtml = '') {
     return `
       <article class="insight-card ${type}">
         <span class="title">${escapeHtml(title)}</span>
         ${meta ? `<small class="meta">${escapeHtml(meta)}</small>` : ''}
         <strong class="value">${escapeHtml(value)}</strong>
+        ${controlsHtml || ''}
       </article>
     `;
   }
@@ -3365,12 +4337,14 @@
     renderLog();
     renderPrefTables();
     renderGraph();
+    renderInstabilityNote();
     renderInsights();
     renderCurvePanel();
     renderAutoButton();
   }
 
   function applyTablesToInstance() {
+    clearInstabilityDemo(false);
     state.variant = els.variantSelect.value;
     if (isRoommatesVariant(state.variant)) {
       try {
@@ -3440,6 +4414,7 @@
     if (state.curves.running) {
       return;
     }
+    clearInstabilityDemo(false);
 
     let start = readNumberInput(els.curveStartInput, 10, 2, 2000);
     let end = readNumberInput(els.curveEndInput, 200, 2, 2000);
@@ -3567,10 +4542,13 @@
   }
 
   function stopCurvesBenchmark() {
+    clearInstabilityDemo(false);
     state.curves.stopRequested = true;
   }
 
   function switchTab(tab) {
+    const hadInstability = Boolean(state.instabilityDemo);
+    clearInstabilityDemo(false);
     state.activeTab = tab === 'curves' ? 'curves' : 'sim';
 
     const isSim = state.activeTab === 'sim';
@@ -3581,6 +4559,11 @@
 
     if (!isSim) {
       renderCurvePanel();
+    }
+    if (hadInstability) {
+      renderPrefTables();
+      renderGraph();
+      renderInstabilityNote();
     }
     updateToggleButtons();
   }
@@ -3661,11 +4644,14 @@
 
   function bindEvents() {
     els.langToggle.addEventListener('click', () => {
+      clearInstabilityDemo(false);
       setLanguage(state.lang === 'en' ? 'pt' : 'en');
     });
 
     els.themeToggle.addEventListener('click', () => {
+      clearInstabilityDemo(false);
       setTheme(state.theme === 'light' ? 'dark' : 'light');
+      renderAll();
     });
 
     els.toggleControlsBtn.addEventListener('click', toggleControlsPanel);
@@ -3708,6 +4694,7 @@
     });
 
     els.variantSelect.addEventListener('change', () => {
+      clearInstabilityDemo(false);
       state.variant = els.variantSelect.value;
       if (state.variant === 'capacity') {
         els.proposerSelect.value = 'men';
@@ -3724,6 +4711,7 @@
     });
 
     els.presetSelect.addEventListener('change', () => {
+      clearInstabilityDemo(false);
       state.preset = els.presetSelect.value;
       updateVariantFieldsVisibility();
       updateScenarioPresetNotes();
@@ -3731,9 +4719,11 @@
     });
 
     els.pairsInput.addEventListener('input', () => {
-      const parsed = Number.parseInt(String(els.pairsInput.value || ''), 10);
-      const n = Number.isFinite(parsed) ? clamp(parsed, 2, 2000) : 2;
-      syncForbiddenCountBounds(n * n);
+      clearInstabilityDemo();
+      const n = readParticipantsInput(state.variant, 5, 2000);
+      if (!isRoommatesVariant(state.variant)) {
+        syncForbiddenCountBounds(n * n);
+      }
     });
 
     const residentInputs = [
@@ -3747,6 +4737,7 @@
     ];
     for (const input of residentInputs) {
       input.addEventListener('input', () => {
+        clearInstabilityDemo();
         if (state.variant === 'capacity') {
           syncResidentMatchingBounds();
         }
@@ -3755,13 +4746,15 @@
 
     if (els.prefLayoutToggleBtn) {
       els.prefLayoutToggleBtn.addEventListener('click', () => {
+        clearInstabilityDemo(false);
         state.prefTablesStacked = !state.prefTablesStacked;
         updatePrefLayoutToggle();
-        renderPrefTables();
+        renderAll();
       });
     }
 
     els.proposerSelect.addEventListener('change', () => {
+      clearInstabilityDemo(false);
       state.proposerSide = els.proposerSelect.value === 'women' ? 'women' : 'men';
       if (state.instance) {
         initializeEngine();
@@ -3770,24 +4763,28 @@
     });
 
     els.groupLeftInput.addEventListener('input', () => {
+      clearInstabilityDemo(false);
       els.groupLeftInput.dataset.default = '0';
       updateDynamicLabels();
       renderAll();
     });
 
     els.groupRightInput.addEventListener('input', () => {
+      clearInstabilityDemo(false);
       els.groupRightInput.dataset.default = '0';
       updateDynamicLabels();
       renderAll();
     });
 
     els.groupSingleInput.addEventListener('input', () => {
+      clearInstabilityDemo(false);
       els.groupSingleInput.dataset.default = '0';
       updateDynamicLabels();
       renderAll();
     });
 
     els.speedSelect.addEventListener('change', () => {
+      clearInstabilityDemo();
       if (state.autoTimer) {
         stopAuto(false);
         toggleAuto();
@@ -3795,10 +4792,12 @@
     });
 
     els.loadPresetBtn.addEventListener('click', () => {
+      clearInstabilityDemo(false);
       loadFromControls('status_loaded');
     });
 
     els.resetRunBtn.addEventListener('click', () => {
+      clearInstabilityDemo(false);
       initializeEngine();
       setStatus('status_reset');
     });
@@ -3806,12 +4805,48 @@
     els.runStepBtn.addEventListener('click', runStep);
     els.autoRunBtn.addEventListener('click', toggleAuto);
     els.runFullBtn.addEventListener('click', runFull);
+    if (els.randomPerfectMatchingBtn) {
+      els.randomPerfectMatchingBtn.addEventListener('click', generateRandomPerfectMatching);
+    }
+    if (els.findInstabilityBtn) {
+      els.findInstabilityBtn.addEventListener('click', runFindInstabilityDemo);
+    }
+
+    els.insightsGrid.addEventListener('click', (event) => {
+      const target = event.target instanceof Element
+        ? event.target.closest('button[data-optimality-action]')
+        : null;
+      if (!target) {
+        return;
+      }
+      const action = target.getAttribute('data-optimality-action');
+      if (action === 'run') {
+        runOptimalityEmpiricalComputationFromInsight();
+      } else if (action === 'cancel') {
+        stopOptimalityEmpiricalComputationByUser();
+      }
+    });
+
+    els.insightsGrid.addEventListener('change', (event) => {
+      const target = event.target instanceof Element
+        ? event.target.closest('input[data-optimality-limit]')
+        : null;
+      if (!target) {
+        return;
+      }
+      const normalized = normalizeOptimalityStateLimit(target.value, state.optimalityStateLimit);
+      state.optimalityStateLimit = normalized;
+      target.value = String(normalized);
+      renderInsights();
+    });
 
     els.addManRowBtn.addEventListener('click', () => {
+      clearInstabilityDemo();
       els.menEditorTable.appendChild(createEditorRow('men'));
     });
 
     els.addWomanRowBtn.addEventListener('click', () => {
+      clearInstabilityDemo();
       els.womenEditorTable.appendChild(createEditorRow('women'));
     });
 
@@ -3819,6 +4854,7 @@
     els.exportCsvBtn.addEventListener('click', exportCurrentCsv);
 
     els.csvInput.addEventListener('change', async () => {
+      clearInstabilityDemo(false);
       const file = els.csvInput.files && els.csvInput.files[0];
       if (!file) return;
 
@@ -3837,11 +4873,13 @@
     els.tabCurvesBtn.addEventListener('click', () => switchTab('curves'));
 
     els.runCurvesBtn.addEventListener('click', () => {
+      clearInstabilityDemo(false);
       void runCurvesBenchmark();
     });
     els.stopCurvesBtn.addEventListener('click', stopCurvesBenchmark);
 
     els.curveXMaxSelect.addEventListener('change', () => {
+      clearInstabilityDemo(false);
       const v = Number.parseInt(String(els.curveXMaxSelect.value || ''), 10);
       state.curves.xMax = Number.isFinite(v) ? v : null;
       state.curves.tooltip = null;
@@ -3849,6 +4887,7 @@
     });
 
     els.curveYZoomInput.addEventListener('input', () => {
+      clearInstabilityDemo(false);
       const z = Number.parseFloat(String(els.curveYZoomInput.value || '1'));
       state.curves.yZoom = Number.isFinite(z) ? clamp(z, 1, 8) : 1;
       state.curves.tooltip = null;
@@ -3867,6 +4906,7 @@
 
     for (const [el, key] of toggleMap) {
       el.addEventListener('change', () => {
+        clearInstabilityDemo(false);
         state.curves.toggles[key] = Boolean(el.checked);
         state.curves.tooltip = null;
         renderCurvePanel();

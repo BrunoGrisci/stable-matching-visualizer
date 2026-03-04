@@ -60,7 +60,7 @@
 
         <div id="pairsField" class="field-slot">
           <label id="pairsLabel" for="pairsInput" data-i18n="pairs_label">Number of pairs (n)</label>
-          <input id="pairsInput" type="number" min="2" max="2000" step="1" value="5" inputmode="numeric">
+          <input id="pairsInput" type="number" min="1" max="2000" step="1" value="5" inputmode="numeric">
         </div>
 
         <details id="advancedDetails" open>
@@ -148,6 +148,11 @@
       <div class="row-btns">
         <button id="loadPresetBtn" data-i18n="load_preset_btn">Load instance</button>
         <button id="resetRunBtn" class="secondary" data-i18n="reset_btn">Reset run</button>
+      </div>
+
+      <div class="row-btns">
+        <button id="randomPerfectMatchingBtn" class="secondary" data-i18n="random_matching_btn">Generate random perfect matching</button>
+        <button id="findInstabilityBtn" class="secondary" data-i18n="find_unstable_btn">Find unstable pair</button>
       </div>
 
       <div class="field-grid two">
@@ -245,6 +250,7 @@
                 <h3 id="graphTitle" data-i18n="graph_title">Bipartite graph</h3>
                 <span id="graphModeTag" class="chip"></span>
               </div>
+              <div id="instabilityNote" class="instability-note hidden" aria-live="polite"></div>
               <div id="graphArea" class="graph-area">
                 <svg id="matchGraph" viewBox="0 0 1200 620" role="img" aria-label="Stable matching graph"></svg>
               </div>

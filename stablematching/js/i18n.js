@@ -101,6 +101,7 @@
 
       load_preset_btn: 'Load instance',
       reset_btn: 'Reset run',
+      random_matching_btn: 'Generate random perfect matching',
       advanced_summary: 'Variant parameters',
       forbidden_label: 'Forbidden pairs count (0 to n^2)',
       capacity_label: 'Capacities (proposer:cap, comma separated)',
@@ -109,6 +110,7 @@
       auto_run_btn: 'Auto run',
       auto_pause_btn: 'Pause',
       run_full_btn: 'Run full',
+      find_unstable_btn: 'Find unstable pair',
       csv_label: 'Import instance (.csv)',
 
       counter_proposals: 'Proposals',
@@ -213,8 +215,12 @@
       status_curve_done: 'Curve benchmark completed.',
       status_curve_stopped: 'Curve benchmark stopped.',
       status_export_done: 'CSV exported.',
+      status_random_matching_loaded: 'Random perfect matching generated for the current instance.',
+      status_random_matching_unavailable: 'Could not generate a compatible perfect matching for the current instance.',
       status_became_single: 'became single',
       status_finished_no_solution: 'Execution finished: no stable matching exists for this instance.',
+      instability_none_msg: 'No instability example found for the current matching.',
+      instability_example_msg: 'Example of instability: {a} and {b} each prefer the other to their current partners {aPartner} and {bPartner}.',
 
       step_initial: 'All participants start free.',
       step_initial_numberphile_pride: '"It is a truth universally acknowledged, that a single man in possession of a good fortune, must be in want of a wife."',
@@ -275,6 +281,9 @@
       insight_optimal_not_applicable: 'Evaluated in one-to-one settings without forbidden pairs, and in resident matching.',
       insight_optimal_not_applicable_roommates: 'Not applicable: Stable Roommates has one group and no proposer/receiver optimality split.',
       insight_exists_title: 'Stable matching exists',
+      insight_optimal_limit_label: 'State limit',
+      insight_optimal_run_btn: 'Run check',
+      insight_optimal_cancel_btn: 'Cancel check',
       insight_optimal_progress: 'states explored: {states}, stable matchings: {count}',
       insight_optimal_empirical_checked: 'Empirical check enumerated {count} stable matching(s).',
       insight_optimal_empirical_aborted: 'Empirical check is partial ({count} stable matching(s) before cutoff: {reason}).',
@@ -286,6 +295,7 @@
       empirical_reason_no_stable: 'no stable matching found',
       empirical_reason_unstable_output: 'computed output is unstable',
       empirical_reason_not_run: 'not run',
+      empirical_reason_cancelled: 'cancelled by user',
       insight_good_bad_current: 'Holds for the computed matching.',
       insight_good_bad_not_applicable: 'Categories missing or incomplete.',
 
@@ -435,6 +445,7 @@
 
       load_preset_btn: 'Carregar instância',
       reset_btn: 'Reiniciar execução',
+      random_matching_btn: 'Gerar pareamento perfeito aleatório',
       advanced_summary: 'Parâmetros da variação',
       forbidden_label: 'Quantidade de pares proibidos (0 a n^2)',
       capacity_label: 'Capacidades (proponente:cap, separados por vírgula)',
@@ -443,6 +454,7 @@
       auto_run_btn: 'Auto executar',
       auto_pause_btn: 'Pausar',
       run_full_btn: 'Executar completo',
+      find_unstable_btn: 'Encontrar par instável',
       csv_label: 'Importar instância (.csv)',
 
       counter_proposals: 'Propostas',
@@ -547,8 +559,12 @@
       status_curve_done: 'Benchmark das curvas concluído.',
       status_curve_stopped: 'Benchmark das curvas interrompido.',
       status_export_done: 'CSV exportado.',
+      status_random_matching_loaded: 'Pareamento perfeito aleatório gerado para a instância atual.',
+      status_random_matching_unavailable: 'Não foi possível gerar um pareamento perfeito compatível para a instância atual.',
       status_became_single: 'ficou solteiro',
       status_finished_no_solution: 'Execução finalizada: não existe pareamento estável para esta instância.',
+      instability_none_msg: 'Nenhum exemplo de instabilidade foi encontrado para o pareamento atual.',
+      instability_example_msg: 'Exemplo de instabilidade: {a} e {b} preferem um ao outro aos seus parceiros atuais {aPartner} e {bPartner}.',
 
       step_initial: 'Todos os participantes iniciam livres.',
       step_initial_numberphile_pride: '"É uma verdade universalmente conhecida que um homem solteiro, em posse de grande fortuna, deve estar procurando uma esposa."',
@@ -609,6 +625,9 @@
       insight_optimal_not_applicable: 'Avaliado em cenários um-para-um sem pares proibidos e no pareamento de residentes.',
       insight_optimal_not_applicable_roommates: 'Não se aplica: em Colegas de quarto estáveis há um único grupo, sem divisão ótimo para proponente/péssimo para receptor.',
       insight_exists_title: 'Pareamento estável existe',
+      insight_optimal_limit_label: 'Limite de estados',
+      insight_optimal_run_btn: 'Executar verificação',
+      insight_optimal_cancel_btn: 'Cancelar verificação',
       insight_optimal_progress: 'estados explorados: {states}, emparelhamentos estáveis: {count}',
       insight_optimal_empirical_checked: 'Verificação empírica enumerou {count} emparelhamento(s) estável(is).',
       insight_optimal_empirical_aborted: 'Verificação empírica parcial ({count} emparelhamento(s) estável(is) antes do corte: {reason}).',
@@ -620,6 +639,7 @@
       empirical_reason_no_stable: 'nenhum emparelhamento estável encontrado',
       empirical_reason_unstable_output: 'resultado calculado é instável',
       empirical_reason_not_run: 'não executada',
+      empirical_reason_cancelled: 'cancelada pelo usuário',
       insight_good_bad_current: 'Vale para o emparelhamento calculado.',
       insight_good_bad_not_applicable: 'Categorias ausentes ou incompletas.',
 

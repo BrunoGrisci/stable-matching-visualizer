@@ -1470,7 +1470,7 @@
   }
 
   function createRandomInstance(n, seed) {
-    const size = clamp(toInt(n, 5), 2, 2000);
+    const size = clamp(toInt(n, 5), 1, 2000);
     const rng = createRng(seed);
     const men = sequentialNames('M', size);
     const women = sequentialNames('W', size);
@@ -1494,7 +1494,7 @@
   }
 
   function createInverseInstance(n) {
-    const size = clamp(toInt(n, 5), 2, 2000);
+    const size = clamp(toInt(n, 5), 1, 2000);
     const men = sequentialNames('M', size);
     const women = sequentialNames('W', size);
     const mPrefs = {};
@@ -1518,7 +1518,7 @@
   }
 
   function createWorstCaseInstance(n) {
-    const size = clamp(toInt(n, 5), 2, 2000);
+    const size = clamp(toInt(n, 5), 1, 2000);
     const men = sequentialNames('M', size);
     const women = sequentialNames('W', size);
     const mPrefs = {};
@@ -1567,7 +1567,7 @@
   }
 
   function createEasyInstance(n) {
-    const size = clamp(toInt(n, 5), 2, 2000);
+    const size = clamp(toInt(n, 5), 1, 2000);
     const men = sequentialNames('M', size);
     const women = sequentialNames('W', size);
     const mPrefs = {};

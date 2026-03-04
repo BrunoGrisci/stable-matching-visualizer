@@ -679,6 +679,14 @@ body.code-collapsed #codeColumn {
   background: color-mix(in srgb, var(--graph-active) 18%, var(--panel));
 }
 
+.pref-table tr.instability-row {
+  background: color-mix(in srgb, #f2a84f 12%, var(--panel));
+}
+
+.pref-table .name-cell.instability-actor {
+  box-shadow: inset 0 0 0 2px color-mix(in srgb, #f2a84f 62%, transparent);
+}
+
 .pref-table td.pref-cell {
   min-width: 74px;
   text-align: center;
@@ -752,6 +760,18 @@ body.code-collapsed #codeColumn {
 
 .pref-table td.pref-cell.engaged.proposed {
   box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--graph-active) 62%, transparent);
+}
+
+.pref-table td.pref-cell.instability-current {
+  background: color-mix(in srgb, #4f83d1 25%, var(--panel));
+  box-shadow: inset 0 0 0 2px color-mix(in srgb, #4f83d1 56%, transparent);
+}
+
+.pref-table td.pref-cell.instability-blocking {
+  background: color-mix(in srgb, var(--danger) 18%, var(--panel));
+  box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--danger) 58%, transparent);
+  border-style: dashed;
+  border-color: color-mix(in srgb, var(--danger) 64%, transparent);
 }
 
 .phase2-trace-content {
@@ -851,6 +871,22 @@ body.code-collapsed #codeColumn {
   gap: 0.65rem;
 }
 
+.instability-note {
+  margin: 0.4rem 0 0.5rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid color-mix(in srgb, var(--accent) 26%, transparent);
+  background: color-mix(in srgb, var(--accent) 10%, var(--panel));
+  padding: 0.45rem 0.55rem;
+  font-size: 0.79rem;
+  line-height: 1.35;
+  color: var(--text);
+}
+
+.instability-note.warn {
+  border-color: color-mix(in srgb, var(--danger) 42%, transparent);
+  background: color-mix(in srgb, var(--danger) 12%, var(--panel));
+}
+
 .chip {
   border-radius: 999px;
   background: color-mix(in srgb, var(--accent) 15%, var(--panel));
@@ -906,6 +942,20 @@ body.code-collapsed #codeColumn {
   stroke: var(--graph-active);
   stroke-width: 3.4;
   stroke-opacity: 0.95;
+}
+
+.graph-instability-current {
+  stroke: color-mix(in srgb, #4f83d1 88%, #1f4b78);
+  stroke-width: 4.6;
+  stroke-opacity: 0.9;
+}
+
+.graph-instability-blocking {
+  stroke: color-mix(in srgb, var(--danger) 90%, #7f1d1d);
+  stroke-width: 3.2;
+  stroke-opacity: 0.96;
+  stroke-dasharray: 8 6;
+  stroke-linecap: round;
 }
 
 .code-column {
@@ -1192,6 +1242,40 @@ body.theme-dark .code-display {
 .insight-card .value {
   font-family: var(--font-title);
   font-size: 0.94rem;
+}
+
+.insight-controls {
+  margin-top: 0.12rem;
+  display: flex;
+  align-items: end;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+
+.insight-limit-control {
+  display: grid;
+  gap: 0.14rem;
+  min-width: 150px;
+  flex: 1 1 180px;
+}
+
+.insight-limit-control span {
+  font-size: 0.64rem;
+  color: var(--muted);
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  font-weight: 700;
+}
+
+.insight-limit-control input {
+  font-size: 0.78rem;
+  padding: 0.32rem 0.42rem;
+}
+
+.insight-controls button {
+  font-size: 0.74rem;
+  padding: 0.38rem 0.58rem;
+  white-space: nowrap;
 }
 
 .insight-card.good .value {
