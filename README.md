@@ -8,6 +8,7 @@
 Stable Matching Visualizer is an educational webtool for studying stable matching models with step-by-step execution, synchronized tables/graphs, algorithm-aware counters, and empirical complexity curves.
 
 🔗 Live demo: https://brunogrisci.github.io/stablematching
+
 🔗 GitHub repository: https://github.com/BrunoGrisci/stable-matching-visualizer
 
 ![Overview of the Stable Matching Visualizer](overview.png)
